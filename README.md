@@ -28,6 +28,14 @@ It finds common startup items, writes them to a reviewable CSV, opens the CSV in
 
 It does not disable Windows services. That is deliberate.
 
+### `scripts/blue-ridge-print-queue-cleaner.ps1`
+
+A safe Windows-side print queue cleanup utility.
+
+It clears stuck print jobs, restarts the Print Spooler, clears the spool folder, and shows printer/queue status before and after cleanup. It is meant to be run before power-cycling printers or doing deeper driver/port repair.
+
+It does not delete printers, drivers, ports, vendor utilities, or change the default printer.
+
 ## Standard maintenance baseline: what it does
 
 The standard maintenance script:
@@ -159,6 +167,37 @@ It is an audit-and-confirm tool, not an automatic debloater.
 8. Type `DISABLE` to confirm.
 9. The script disables only the selected items.
 
+## Print Queue Cleaner: what it does
+
+The Print Queue Cleaner:
+
+- Shows printer status before cleanup
+- Shows any visible print jobs before cleanup
+- Attempts to remove print jobs using PowerShell print commands
+- Stops the Print Spooler
+- Clears `C:\Windows\System32\spool\PRINTERS`
+- Starts the Print Spooler again
+- Sets the Print Spooler startup type to Automatic
+- Attempts to resume paused printers
+- Shows printer status after cleanup
+- Shows any remaining print jobs after cleanup
+- Keeps a simple log at `C:\ProgramData\BlueRidge\Logs\print-queue-cleaner.log`
+
+## Print Queue Cleaner: what it does not do
+
+The Print Queue Cleaner intentionally does not:
+
+- Delete printers
+- Delete printer drivers
+- Delete printer ports
+- Reset TCP/IP printer ports
+- Remove vendor printer utilities
+- Change the default printer
+- Attempt deep driver repair
+- Attempt WSD/TCP port surgery
+
+It is a safe first-pass print cleanup tool, not a deep printer rebuild script.
+
 ## Recommended field workflow
 
 For a Windows 11 Home machine that needs RDP support:
@@ -174,6 +213,7 @@ For a Windows 11 Home machine that needs RDP support:
 9. Test SSH and RDP.
 10. Install the monthly Windows Update enforcer if the machine should continue receiving forced monthly update/reboot maintenance.
 11. Run Startup App Checker if startup items need manual review.
+12. Run Print Queue Cleaner when print jobs are stuck before power-cycling printers.
 
 ## Install/run standard maintenance from local copy
 
@@ -250,6 +290,27 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
 ```
 
+## Install/run Print Queue Cleaner from local copy
+
+Create the Blue Ridge folder:
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+```
+
+Open the target file in Notepad:
+
+```powershell
+notepad "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
+```
+
+Paste the script contents, save, then run from an elevated PowerShell session:
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
+```
+
 ## Quick download from GitHub
 
 The repository may be private. These raw URLs work when authenticated or when the repository is public.
@@ -291,6 +352,17 @@ Invoke-WebRequest `
   -OutFile "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
 Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
+```
+
+### Print Queue Cleaner
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-print-queue-cleaner.ps1" `
+  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
 ```
 
 ## Scheduled tasks
@@ -340,7 +412,7 @@ C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1
 
 The installer checks whether the task already exists. If it does, the script leaves the existing task alone.
 
-Startup App Checker is interactive and does not create a scheduled task.
+Startup App Checker and Print Queue Cleaner are interactive/manual tools and do not create scheduled tasks.
 
 ## Logs and review files
 
@@ -352,6 +424,7 @@ C:\ProgramData\BlueRidge\Logs\maintenance.log
 C:\ProgramData\BlueRidge\Logs\windows-update-enforcer-setup.log
 C:\ProgramData\BlueRidge\Logs\windows-update-enforcer.log
 C:\ProgramData\BlueRidge\Logs\startup-app-checker.log
+C:\ProgramData\BlueRidge\Logs\print-queue-cleaner.log
 C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv
 C:\ProgramData\BlueRidge\StartupAppChecker\DisabledStartupItems\
 ```
@@ -404,6 +477,12 @@ Run Startup App Checker manually:
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
 ```
 
+Run Print Queue Cleaner manually:
+
+```powershell
+PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
+```
+
 Test SSH:
 
 ```powershell
@@ -428,6 +507,7 @@ This repo favors maintenance that is defensible, boring, and useful:
 - Avoid disabling services unless there is a named problem
 - Separate normal maintenance from forced update/reboot behavior
 - Make startup changes reviewable and admin-confirmed
+- Keep print repair safe before moving to driver, port, or vendor-tool work
 - Create repeatable maintenance that other admins can inspect and extend
 
 More aggressive scripts can be added later for power users, lab machines, or deep-repair situations. Those should live as separate scripts so the standard baseline stays safe.
@@ -441,7 +521,7 @@ Possible future scripts:
 - Windows Update reset utility
 - Startup app restore helper
 - Battery health report
-- Printer cleanup helper
+- Deep printer repair helper
 - Network stack repair helper
 - Defender offline scan launcher
 - Student laptop tune-up variant
