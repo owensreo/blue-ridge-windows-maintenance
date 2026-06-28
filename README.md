@@ -36,6 +36,14 @@ A safe first-pass Windows network cleanup utility.
 
 It flushes DNS, clears NetBIOS and ARP cache, resets Winsock, resets TCP/IP, offers DHCP release/renew, offers WinHTTP proxy reset, offers Kerberos ticket purge, and offers review-based saved credential cleanup for the current Windows user.
 
+### `scripts/blue-ridge-outlook-teams-soft-reset.ps1`
+
+A safe first-pass Microsoft Outlook, Microsoft Teams, and Office repair helper.
+
+It closes Outlook, Teams, and Office apps, clears classic/new Teams cache, clears safe Outlook cache areas, resets the classic Outlook navigation pane, offers an Excel wake-up launch, offers a Microsoft Office Click-to-Run update, offers Office Quick Repair, offers Outlook safe mode, and offers optional Office identity cache reset.
+
+It does **not** delete PST files, OST files by default, Outlook profiles, mail accounts, calendar entries, contacts, Teams installs, Office installs, or force the user onto new Outlook.
+
 ### `scripts/blue-ridge-host-domain-trust-repair.ps1`
 
 A host-side domain secure-channel repair tool.
@@ -100,7 +108,9 @@ Run this from a domain controller or admin workstation with AD/RSAT tools. It as
 
 That restraint is the point. This is a safe baseline, not a scorched-earth repair pass.
 
-## Windows Update enforcer: what it does
+## Windows Update enforcer
+
+The monthly Windows Update enforcer:
 
 - Uses built-in Windows Update COM objects
 - Starts/checks Windows Update related services: `wuauserv`, `bits`, `cryptsvc`, and `msiserver`
@@ -116,17 +126,7 @@ That restraint is the point. This is a safe baseline, not a scorched-earth repai
 - Schedules that task for the 3rd Sunday of every month at `2:00 AM`
 - Runs the scheduled task as `SYSTEM` with highest privileges
 
-## Windows Update enforcer: what it does not do
-
-- Disable Windows Update services
-- Reset Windows Update components
-- Delete SoftwareDistribution
-- Install third-party modules
-- Require PSWindowsUpdate
-- Intentionally install driver updates
-- Loop forever until every update succeeds
-- Keep retrying failures beyond the second attempt
-- Force a reboot if no updates installed and no reboot is pending
+It intentionally does not disable Windows Update services, reset Windows Update components, delete SoftwareDistribution, install third-party modules, require PSWindowsUpdate, intentionally install driver updates, loop forever, or force a reboot if nothing installed and no reboot is pending.
 
 ## Startup App Checker
 
@@ -180,6 +180,44 @@ Network Fuzz Buster is a safe first-pass network cleanup tool. It:
 Saved credentials are per-user. If this script is run as `Blue-Ridge`, it reviews credentials visible to `Blue-Ridge`. To review the affected user's saved Credential Manager entries, run it from that user's Windows session and elevate from there.
 
 It intentionally does not delete adapters, VPN clients, Wi-Fi profiles, user profiles, certificates, passwords, cached domain logon secrets, or domain join.
+
+## Outlook Teams Soft Reset
+
+Outlook Teams Soft Reset is a safe first-pass Microsoft 365 desktop app repair helper for classic Outlook, Teams, and Office update weirdness.
+
+It:
+
+- Selects the affected local user profile
+- Closes Outlook, Teams, Excel, Word, PowerPoint, OneNote, Publisher, Visio, Access, and related Office helpers
+- Clears classic Teams cache when present
+- Clears new Teams cache when present
+- Clears Outlook RoamCache
+- Clears Outlook temporary attachment cache
+- Clears Office file cache
+- Runs classic Outlook `/resetnavpane` when Outlook is found
+- Offers to launch Excel briefly to wake Office update plumbing
+- Offers to force Microsoft Office Click-to-Run update with `OfficeC2RClient.exe /update user`
+- Offers to open the Office Quick Repair applet
+- Offers to launch classic Outlook in safe mode
+- Offers optional Office identity cache reset by moving identity/cache folders to backup
+- Logs to `C:\ProgramData\BlueRidge\Logs\outlook-teams-soft-reset.log`
+- Stores optional moved identity/cache backups under `C:\ProgramData\BlueRidge\OutlookTeamsSoftReset\Backups`
+
+It intentionally does not:
+
+- Delete PST files
+- Delete OST files by default
+- Delete Outlook profiles
+- Remove mail accounts
+- Remove calendar entries
+- Remove contacts
+- Force new Outlook
+- Uninstall Teams
+- Uninstall Office
+- Reset user passwords
+- Delete Credential Manager entries by default
+
+The Office identity cache reset is optional because it may sign the user out of Office, Outlook, Teams, OneDrive, or Microsoft 365 apps. Use it when sign-in/token weirdness is the suspected problem.
 
 ## Domain Trust Repair tools
 
@@ -251,7 +289,8 @@ For a Windows 11 Home machine that needs RDP support:
 11. Run Startup App Checker if startup items need manual review.
 12. Run Print Queue Cleaner when print jobs are stuck before power-cycling printers.
 13. Run Network Fuzz Buster when DNS, DHCP, proxy, TCP/IP, Winsock, or saved credential weirdness is suspected.
-14. Use the host-side or DC-side Domain Trust Repair scripts when a domain-joined machine appears to have lost its trust relationship.
+14. Run Outlook Teams Soft Reset when Outlook, Teams, or Office desktop apps will not open, loop, hang, or need an update/quick repair nudge.
+15. Use the host-side or DC-side Domain Trust Repair scripts when a domain-joined machine appears to have lost its trust relationship.
 
 ## Install/run from local copy
 
@@ -339,6 +378,17 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
 ```
 
+### Outlook Teams Soft Reset
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-outlook-teams-soft-reset.ps1" `
+  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-outlook-teams-soft-reset.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-outlook-teams-soft-reset.ps1"
+```
+
 ### Host Domain Trust Repair
 
 ```powershell
@@ -380,7 +430,7 @@ Blue Ridge Monthly Windows Update Enforcer
 Runs: C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1
 ```
 
-Startup App Checker, Print Queue Cleaner, Network Fuzz Buster, and the Domain Trust Repair scripts are interactive/manual tools and do not create scheduled tasks.
+Startup App Checker, Print Queue Cleaner, Network Fuzz Buster, Outlook Teams Soft Reset, and the Domain Trust Repair scripts are interactive/manual tools and do not create scheduled tasks.
 
 ## Logs and review files
 
@@ -392,12 +442,14 @@ C:\ProgramData\BlueRidge\Logs\windows-update-enforcer.log
 C:\ProgramData\BlueRidge\Logs\startup-app-checker.log
 C:\ProgramData\BlueRidge\Logs\print-queue-cleaner.log
 C:\ProgramData\BlueRidge\Logs\network-fuzz-buster.log
+C:\ProgramData\BlueRidge\Logs\outlook-teams-soft-reset.log
 C:\ProgramData\BlueRidge\Logs\host-domain-trust-repair.log
 C:\ProgramData\BlueRidge\Logs\dc-domain-trust-repair.log
 C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv
 C:\ProgramData\BlueRidge\StartupAppChecker\DisabledStartupItems\
 C:\ProgramData\BlueRidge\NetworkFuzzBuster\credential-review.csv
 C:\ProgramData\BlueRidge\NetworkFuzzBuster\tcpip-reset.log
+C:\ProgramData\BlueRidge\OutlookTeamsSoftReset\Backups\
 ```
 
 The logs are intentionally simple. They record maintenance actions and errors. They do not collect a full system inventory or user activity.
@@ -419,6 +471,7 @@ Run tools manually:
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
+PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-outlook-teams-soft-reset.ps1"
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-host-domain-trust-repair.ps1"
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-dc-domain-trust-repair.ps1"
 ```
@@ -444,6 +497,7 @@ This repo favors maintenance that is defensible, boring, and useful:
 - Make startup changes reviewable and admin-confirmed
 - Keep print repair safe before moving to driver, port, or vendor-tool work
 - Keep network repair safe before moving to adapter removal, VPN repair, domain repair, or profile work
+- Fix Microsoft 365 desktop weirdness without destroying Outlook data or forcing new Outlook
 - Repair domain trust without immediately doing the full unjoin/rejoin dance
 - Create repeatable maintenance that other admins can inspect and extend
 
@@ -461,6 +515,7 @@ Possible future scripts:
 - Deep printer repair helper
 - Deep network repair helper
 - Domain trust diagnostics helper
+- Outlook profile rebuild helper
 - Defender offline scan launcher
 - Student laptop tune-up variant
 
