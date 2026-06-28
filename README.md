@@ -36,6 +36,14 @@ It clears stuck print jobs, restarts the Print Spooler, clears the spool folder,
 
 It does not delete printers, drivers, ports, vendor utilities, or change the default printer.
 
+### `scripts/blue-ridge-network-fuzz-buster.ps1`
+
+A safe first-pass Windows network cleanup utility.
+
+It flushes DNS, clears NetBIOS and ARP cache, resets Winsock, resets TCP/IP, offers DHCP release/renew, offers WinHTTP proxy reset, offers Kerberos ticket purge, and offers review-based saved credential cleanup for the current Windows user.
+
+It does not delete adapters, VPN clients, Wi-Fi profiles, user profiles, certificates, passwords, or domain join.
+
 ## Standard maintenance baseline: what it does
 
 The standard maintenance script:
@@ -198,6 +206,63 @@ The Print Queue Cleaner intentionally does not:
 
 It is a safe first-pass print cleanup tool, not a deep printer rebuild script.
 
+## Network Fuzz Buster: what it does
+
+The Network Fuzz Buster:
+
+- Shows a network snapshot before cleanup
+- Flushes DNS with `Clear-DnsClientCache`
+- Flushes DNS with `ipconfig /flushdns`
+- Clears NetBIOS name cache with `nbtstat -R`
+- Refreshes NetBIOS registrations with `nbtstat -RR`
+- Clears ARP cache
+- Resets Winsock
+- Resets the TCP/IP stack
+- Writes a TCP/IP reset log to `C:\ProgramData\BlueRidge\NetworkFuzzBuster\tcpip-reset.log`
+- Offers DHCP release/renew
+- Offers WinHTTP proxy reset
+- Offers Kerberos ticket purge for the current logon session
+- Offers review-based saved credential cleanup through a CSV
+- Shows a network snapshot after cleanup
+- Recommends reboot after Winsock and TCP/IP reset
+- Offers a final `REBOOT` prompt
+- Keeps a simple log at `C:\ProgramData\BlueRidge\Logs\network-fuzz-buster.log`
+
+## Network Fuzz Buster: credential cleanup notes
+
+Saved credentials are per-user. If the script is run as `Blue-Ridge`, it reviews credentials visible to `Blue-Ridge`. To review the affected user's saved Credential Manager entries, run it from that user's Windows session and elevate from there.
+
+Credential cleanup is review-based:
+
+1. Type `REVIEW` when prompted.
+2. The script writes `credential-review.csv`.
+3. Put `Y` beside saved credentials to clear.
+4. Save and close Notepad.
+5. Press Enter in PowerShell.
+6. Review selected credentials.
+7. Type `CLEARCREDS` to confirm deletion.
+
+Kerberos ticket purge is separate. It clears tickets for the current logon session and does not reset passwords or force logout.
+
+## Network Fuzz Buster: what it does not do
+
+The Network Fuzz Buster intentionally does not:
+
+- Delete network adapters
+- Delete VPN clients
+- Delete Wi-Fi profiles
+- Remove printer ports
+- Change passwords
+- Reset user passwords
+- Force logout
+- Remove domain join
+- Delete Windows user profiles
+- Delete certificates
+- Touch DPAPI keys
+- Delete cached domain logon secrets
+
+It is a network cleanup and cache reset tool, not identity demolition.
+
 ## Recommended field workflow
 
 For a Windows 11 Home machine that needs RDP support:
@@ -214,6 +279,7 @@ For a Windows 11 Home machine that needs RDP support:
 10. Install the monthly Windows Update enforcer if the machine should continue receiving forced monthly update/reboot maintenance.
 11. Run Startup App Checker if startup items need manual review.
 12. Run Print Queue Cleaner when print jobs are stuck before power-cycling printers.
+13. Run Network Fuzz Buster when DNS, DHCP, proxy, TCP/IP, Winsock, or saved credential weirdness is suspected.
 
 ## Install/run standard maintenance from local copy
 
@@ -311,6 +377,27 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
 ```
 
+## Install/run Network Fuzz Buster from local copy
+
+Create the Blue Ridge folder:
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+```
+
+Open the target file in Notepad:
+
+```powershell
+notepad "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
+```
+
+Paste the script contents, save, then run from an elevated PowerShell session:
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
+```
+
 ## Quick download from GitHub
 
 The repository may be private. These raw URLs work when authenticated or when the repository is public.
@@ -365,6 +452,17 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
 ```
 
+### Network Fuzz Buster
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-network-fuzz-buster.ps1" `
+  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
+```
+
 ## Scheduled tasks
 
 ### Standard maintenance
@@ -412,7 +510,7 @@ C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1
 
 The installer checks whether the task already exists. If it does, the script leaves the existing task alone.
 
-Startup App Checker and Print Queue Cleaner are interactive/manual tools and do not create scheduled tasks.
+Startup App Checker, Print Queue Cleaner, and Network Fuzz Buster are interactive/manual tools and do not create scheduled tasks.
 
 ## Logs and review files
 
@@ -425,8 +523,11 @@ C:\ProgramData\BlueRidge\Logs\windows-update-enforcer-setup.log
 C:\ProgramData\BlueRidge\Logs\windows-update-enforcer.log
 C:\ProgramData\BlueRidge\Logs\startup-app-checker.log
 C:\ProgramData\BlueRidge\Logs\print-queue-cleaner.log
+C:\ProgramData\BlueRidge\Logs\network-fuzz-buster.log
 C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv
 C:\ProgramData\BlueRidge\StartupAppChecker\DisabledStartupItems\
+C:\ProgramData\BlueRidge\NetworkFuzzBuster\credential-review.csv
+C:\ProgramData\BlueRidge\NetworkFuzzBuster\tcpip-reset.log
 ```
 
 The logs are intentionally simple. They record maintenance actions and errors. They do not collect a full system inventory or user activity.
@@ -483,6 +584,12 @@ Run Print Queue Cleaner manually:
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
 ```
 
+Run Network Fuzz Buster manually:
+
+```powershell
+PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
+```
+
 Test SSH:
 
 ```powershell
@@ -508,6 +615,7 @@ This repo favors maintenance that is defensible, boring, and useful:
 - Separate normal maintenance from forced update/reboot behavior
 - Make startup changes reviewable and admin-confirmed
 - Keep print repair safe before moving to driver, port, or vendor-tool work
+- Keep network repair safe before moving to adapter removal, VPN repair, domain repair, or profile work
 - Create repeatable maintenance that other admins can inspect and extend
 
 More aggressive scripts can be added later for power users, lab machines, or deep-repair situations. Those should live as separate scripts so the standard baseline stays safe.
@@ -522,7 +630,7 @@ Possible future scripts:
 - Startup app restore helper
 - Battery health report
 - Deep printer repair helper
-- Network stack repair helper
+- Deep network repair helper
 - Defender offline scan launcher
 - Student laptop tune-up variant
 
