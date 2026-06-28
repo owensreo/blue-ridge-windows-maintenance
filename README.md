@@ -20,6 +20,14 @@ It writes a local update runner to `C:\ProgramData\BlueRidge\br-windows-update-e
 
 This script is intentionally separate from the standard maintenance baseline because Windows Update can require reboots, dependency ordering, and multiple passes.
 
+### `scripts/blue-ridge-startup-app-checker.ps1`
+
+A conservative startup app review tool.
+
+It finds common startup items, writes them to a reviewable CSV, opens the CSV in Notepad, lets the admin mark `Y` or `N` in a `Disable` column, then requires a final `DISABLE` confirmation before making changes.
+
+It does not disable Windows services. That is deliberate.
+
 ## Standard maintenance baseline: what it does
 
 The standard maintenance script:
@@ -108,6 +116,49 @@ The update enforcer intentionally does not:
 - Keep retrying failures beyond the second attempt
 - Force a reboot if no updates installed and no reboot is pending
 
+## Startup App Checker: what it does
+
+The Startup App Checker:
+
+- Finds startup registry entries under common `Run` and `RunOnce` locations
+- Finds current-user and all-users Startup folder items
+- Finds non-Microsoft scheduled tasks with Logon or Startup triggers
+- Exports findings to `C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv`
+- Opens the CSV in Notepad for manual review
+- Lets the admin mark `Y` or `N` in the `Disable` column
+- Requires the admin to type `DISABLE` before it changes anything
+- Backs up registry startup entries before removing them
+- Moves Startup folder items to a Blue Ridge disabled-items folder
+- Disables selected scheduled tasks
+- Keeps a simple log at `C:\ProgramData\BlueRidge\Logs\startup-app-checker.log`
+
+## Startup App Checker: what it does not do
+
+The Startup App Checker intentionally does not:
+
+- Disable Windows services
+- Disable drivers
+- Remove applications
+- Delete application files
+- Disable security products by name
+- Disable browser extensions
+- Change Store app background permissions
+- Guess what should be disabled automatically
+
+It is an audit-and-confirm tool, not an automatic debloater.
+
+## Startup App Checker workflow
+
+1. Run the script from an elevated PowerShell window.
+2. The script creates and opens `startup-review.csv` in Notepad.
+3. In the `Disable` column, put `Y` beside items to disable.
+4. Leave `N` beside items to keep.
+5. Save and close Notepad.
+6. Return to PowerShell and press Enter.
+7. Review the list of items marked for disable.
+8. Type `DISABLE` to confirm.
+9. The script disables only the selected items.
+
 ## Recommended field workflow
 
 For a Windows 11 Home machine that needs RDP support:
@@ -122,6 +173,7 @@ For a Windows 11 Home machine that needs RDP support:
 8. Review Microsoft Store updates.
 9. Test SSH and RDP.
 10. Install the monthly Windows Update enforcer if the machine should continue receiving forced monthly update/reboot maintenance.
+11. Run Startup App Checker if startup items need manual review.
 
 ## Install/run standard maintenance from local copy
 
@@ -177,6 +229,27 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-windows-update-enforcer-install.ps1"
 ```
 
+## Install/run Startup App Checker from local copy
+
+Create the Blue Ridge folder:
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+```
+
+Open the target file in Notepad:
+
+```powershell
+notepad "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
+```
+
+Paste the script contents, save, then run from an elevated PowerShell session:
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
+```
+
 ## Quick download from GitHub
 
 The repository may be private. These raw URLs work when authenticated or when the repository is public.
@@ -207,6 +280,17 @@ Invoke-WebRequest `
   -OutFile "C:\ProgramData\BlueRidge\blue-ridge-windows-update-enforcer-install.ps1"
 Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-windows-update-enforcer-install.ps1"
+```
+
+### Startup App Checker
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-startup-app-checker.ps1" `
+  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
 ```
 
 ## Scheduled tasks
@@ -256,15 +340,20 @@ C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1
 
 The installer checks whether the task already exists. If it does, the script leaves the existing task alone.
 
-## Logs
+Startup App Checker is interactive and does not create a scheduled task.
 
-Minimal logs are stored here:
+## Logs and review files
+
+Minimal logs and review files are stored here:
 
 ```text
 C:\ProgramData\BlueRidge\Logs\setup.log
 C:\ProgramData\BlueRidge\Logs\maintenance.log
 C:\ProgramData\BlueRidge\Logs\windows-update-enforcer-setup.log
 C:\ProgramData\BlueRidge\Logs\windows-update-enforcer.log
+C:\ProgramData\BlueRidge\Logs\startup-app-checker.log
+C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv
+C:\ProgramData\BlueRidge\StartupAppChecker\DisabledStartupItems\
 ```
 
 The logs are intentionally simple. They record maintenance actions and errors. They do not collect a full system inventory or user activity.
@@ -309,6 +398,12 @@ Run the monthly Windows Update enforcer manually:
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1"
 ```
 
+Run Startup App Checker manually:
+
+```powershell
+PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
+```
+
 Test SSH:
 
 ```powershell
@@ -332,6 +427,7 @@ This repo favors maintenance that is defensible, boring, and useful:
 - Keep Windows Update available
 - Avoid disabling services unless there is a named problem
 - Separate normal maintenance from forced update/reboot behavior
+- Make startup changes reviewable and admin-confirmed
 - Create repeatable maintenance that other admins can inspect and extend
 
 More aggressive scripts can be added later for power users, lab machines, or deep-repair situations. Those should live as separate scripts so the standard baseline stays safe.
@@ -343,7 +439,7 @@ Possible future scripts:
 - Business workstation baseline
 - Deep repair mode
 - Windows Update reset utility
-- Startup app audit report
+- Startup app restore helper
 - Battery health report
 - Printer cleanup helper
 - Network stack repair helper
