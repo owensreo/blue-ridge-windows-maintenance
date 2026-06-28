@@ -18,15 +18,11 @@ A monthly Windows Update enforcement installer.
 
 It writes a local update runner to `C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1`, creates a scheduled task for the **3rd Sunday of every month at 2:00 AM**, installs pending Windows software updates, retries failed updates one time, ignores anything still failing after the retry, and forces a reboot after updates install or a pending reboot is detected.
 
-This script is intentionally separate from the standard maintenance baseline because Windows Update can require reboots, dependency ordering, and multiple passes.
-
 ### `scripts/blue-ridge-startup-app-checker.ps1`
 
 A conservative startup app review tool.
 
-It finds common startup items, writes them to a reviewable CSV, opens the CSV in Notepad, lets the admin mark `Y` or `N` in a `Disable` column, then requires a final `DISABLE` confirmation before making changes.
-
-It does not disable Windows services. That is deliberate.
+It finds common startup items, writes them to a reviewable CSV, opens the CSV in Notepad, lets the admin mark `Y` or `N` in a `Disable` column, then requires a final `DISABLE` confirmation before making changes. It does not disable Windows services.
 
 ### `scripts/blue-ridge-print-queue-cleaner.ps1`
 
@@ -34,19 +30,25 @@ A safe Windows-side print queue cleanup utility.
 
 It clears stuck print jobs, restarts the Print Spooler, clears the spool folder, and shows printer/queue status before and after cleanup. It is meant to be run before power-cycling printers or doing deeper driver/port repair.
 
-It does not delete printers, drivers, ports, vendor utilities, or change the default printer.
-
 ### `scripts/blue-ridge-network-fuzz-buster.ps1`
 
 A safe first-pass Windows network cleanup utility.
 
 It flushes DNS, clears NetBIOS and ARP cache, resets Winsock, resets TCP/IP, offers DHCP release/renew, offers WinHTTP proxy reset, offers Kerberos ticket purge, and offers review-based saved credential cleanup for the current Windows user.
 
-It does not delete adapters, VPN clients, Wi-Fi profiles, user profiles, certificates, passwords, or domain join.
+### `scripts/blue-ridge-host-domain-trust-repair.ps1`
+
+A host-side domain secure-channel repair tool.
+
+Run this locally on the affected domain-joined workstation. It tests and repairs the computer trust relationship with the domain using `Test-ComputerSecureChannel -Repair`, prompts for a domain repair username in PowerShell, securely prompts for the password, restarts Netlogon, purges Kerberos tickets, runs `gpupdate /force`, and offers a reboot.
+
+### `scripts/blue-ridge-dc-domain-trust-repair.ps1`
+
+A DC-side domain trust repair orchestrator.
+
+Run this from a domain controller or admin workstation with AD/RSAT tools. It asks for the target computer, verifies the AD computer object when the Active Directory module is available, checks WinRM, then remotely runs the secure-channel repair on the affected workstation. This can avoid walking to the workstation or doing a full domain rejoin when PowerShell Remoting still works.
 
 ## Standard maintenance baseline: what it does
-
-The standard maintenance script:
 
 - Creates a local admin account named `Blue-Ridge`
 - Adds `Blue-Ridge` to the local Administrators group
@@ -77,8 +79,6 @@ The standard maintenance script:
 
 ## Standard maintenance baseline: what it does not do
 
-This script intentionally does not:
-
 - Delete user documents
 - Delete the Downloads folder
 - Delete Desktop files
@@ -102,8 +102,6 @@ That restraint is the point. This is a safe baseline, not a scorched-earth repai
 
 ## Windows Update enforcer: what it does
 
-The monthly Windows Update enforcer:
-
 - Uses built-in Windows Update COM objects
 - Starts/checks Windows Update related services: `wuauserv`, `bits`, `cryptsvc`, and `msiserver`
 - Searches for pending Windows software updates
@@ -120,8 +118,6 @@ The monthly Windows Update enforcer:
 
 ## Windows Update enforcer: what it does not do
 
-The update enforcer intentionally does not:
-
 - Disable Windows Update services
 - Reset Windows Update components
 - Delete SoftwareDistribution
@@ -132,55 +128,24 @@ The update enforcer intentionally does not:
 - Keep retrying failures beyond the second attempt
 - Force a reboot if no updates installed and no reboot is pending
 
-## Startup App Checker: what it does
+## Startup App Checker
 
-The Startup App Checker:
+Startup App Checker finds common startup items, exports them to `C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv`, opens the CSV in Notepad, and lets the admin mark `Y` or `N` in the `Disable` column. It requires `DISABLE` before changing anything.
 
-- Finds startup registry entries under common `Run` and `RunOnce` locations
-- Finds current-user and all-users Startup folder items
-- Finds non-Microsoft scheduled tasks with Logon or Startup triggers
-- Exports findings to `C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv`
-- Opens the CSV in Notepad for manual review
-- Lets the admin mark `Y` or `N` in the `Disable` column
-- Requires the admin to type `DISABLE` before it changes anything
-- Backs up registry startup entries before removing them
-- Moves Startup folder items to a Blue Ridge disabled-items folder
-- Disables selected scheduled tasks
-- Keeps a simple log at `C:\ProgramData\BlueRidge\Logs\startup-app-checker.log`
+It checks:
 
-## Startup App Checker: what it does not do
+- Common `Run` and `RunOnce` registry locations
+- Current-user and all-users Startup folders
+- Non-Microsoft scheduled tasks with Logon or Startup triggers
 
-The Startup App Checker intentionally does not:
+It intentionally does not disable services, drivers, applications, security products by name, browser extensions, or Store app background permissions.
 
-- Disable Windows services
-- Disable drivers
-- Remove applications
-- Delete application files
-- Disable security products by name
-- Disable browser extensions
-- Change Store app background permissions
-- Guess what should be disabled automatically
+## Print Queue Cleaner
 
-It is an audit-and-confirm tool, not an automatic debloater.
-
-## Startup App Checker workflow
-
-1. Run the script from an elevated PowerShell window.
-2. The script creates and opens `startup-review.csv` in Notepad.
-3. In the `Disable` column, put `Y` beside items to disable.
-4. Leave `N` beside items to keep.
-5. Save and close Notepad.
-6. Return to PowerShell and press Enter.
-7. Review the list of items marked for disable.
-8. Type `DISABLE` to confirm.
-9. The script disables only the selected items.
-
-## Print Queue Cleaner: what it does
-
-The Print Queue Cleaner:
+Print Queue Cleaner is a safe first-pass print cleanup tool. It:
 
 - Shows printer status before cleanup
-- Shows any visible print jobs before cleanup
+- Shows visible print jobs before cleanup
 - Attempts to remove print jobs using PowerShell print commands
 - Stops the Print Spooler
 - Clears `C:\Windows\System32\spool\PRINTERS`
@@ -189,26 +154,13 @@ The Print Queue Cleaner:
 - Attempts to resume paused printers
 - Shows printer status after cleanup
 - Shows any remaining print jobs after cleanup
-- Keeps a simple log at `C:\ProgramData\BlueRidge\Logs\print-queue-cleaner.log`
+- Logs to `C:\ProgramData\BlueRidge\Logs\print-queue-cleaner.log`
 
-## Print Queue Cleaner: what it does not do
+It intentionally does not delete printers, drivers, ports, vendor utilities, or default printer settings.
 
-The Print Queue Cleaner intentionally does not:
+## Network Fuzz Buster
 
-- Delete printers
-- Delete printer drivers
-- Delete printer ports
-- Reset TCP/IP printer ports
-- Remove vendor printer utilities
-- Change the default printer
-- Attempt deep driver repair
-- Attempt WSD/TCP port surgery
-
-It is a safe first-pass print cleanup tool, not a deep printer rebuild script.
-
-## Network Fuzz Buster: what it does
-
-The Network Fuzz Buster:
+Network Fuzz Buster is a safe first-pass network cleanup tool. It:
 
 - Shows a network snapshot before cleanup
 - Flushes DNS with `Clear-DnsClientCache`
@@ -223,45 +175,64 @@ The Network Fuzz Buster:
 - Offers WinHTTP proxy reset
 - Offers Kerberos ticket purge for the current logon session
 - Offers review-based saved credential cleanup through a CSV
-- Shows a network snapshot after cleanup
 - Recommends reboot after Winsock and TCP/IP reset
-- Offers a final `REBOOT` prompt
-- Keeps a simple log at `C:\ProgramData\BlueRidge\Logs\network-fuzz-buster.log`
 
-## Network Fuzz Buster: credential cleanup notes
+Saved credentials are per-user. If this script is run as `Blue-Ridge`, it reviews credentials visible to `Blue-Ridge`. To review the affected user's saved Credential Manager entries, run it from that user's Windows session and elevate from there.
 
-Saved credentials are per-user. If the script is run as `Blue-Ridge`, it reviews credentials visible to `Blue-Ridge`. To review the affected user's saved Credential Manager entries, run it from that user's Windows session and elevate from there.
+It intentionally does not delete adapters, VPN clients, Wi-Fi profiles, user profiles, certificates, passwords, cached domain logon secrets, or domain join.
 
-Credential cleanup is review-based:
+## Domain Trust Repair tools
 
-1. Type `REVIEW` when prompted.
-2. The script writes `credential-review.csv`.
-3. Put `Y` beside saved credentials to clear.
-4. Save and close Notepad.
-5. Press Enter in PowerShell.
-6. Review selected credentials.
-7. Type `CLEARCREDS` to confirm deletion.
+### Host-side repair
 
-Kerberos ticket purge is separate. It clears tickets for the current logon session and does not reset passwords or force logout.
+Use `blue-ridge-host-domain-trust-repair.ps1` when you are at the affected workstation or connected to it through RDP/remote support.
 
-## Network Fuzz Buster: what it does not do
+It:
 
-The Network Fuzz Buster intentionally does not:
+- Confirms the machine is domain joined
+- Tests the domain secure channel
+- Prompts for a domain repair username directly in PowerShell
+- Securely prompts for that account's password
+- Runs secure-channel repair from the host
+- Restarts Netlogon
+- Purges Kerberos tickets for the current session
+- Runs `gpupdate /force`
+- Offers a reboot
 
-- Delete network adapters
-- Delete VPN clients
-- Delete Wi-Fi profiles
-- Remove printer ports
-- Change passwords
-- Reset user passwords
-- Force logout
-- Remove domain join
-- Delete Windows user profiles
-- Delete certificates
-- Touch DPAPI keys
-- Delete cached domain logon secrets
+### DC-side repair
 
-It is a network cleanup and cache reset tool, not identity demolition.
+Use `blue-ridge-dc-domain-trust-repair.ps1` when you are on a domain controller or admin workstation and want to repair a target workstation remotely.
+
+It:
+
+- Prompts for the target computer name
+- Loads the Active Directory module when available
+- Verifies the AD computer object when possible
+- Checks basic reachability
+- Checks WinRM/PowerShell Remoting
+- Prompts for a domain repair username directly in PowerShell
+- Securely prompts for that account's password
+- Remotely runs the secure-channel repair on the target workstation
+- Restarts Netlogon on the target workstation
+- Purges Kerberos tickets on the target workstation
+- Runs `gpupdate /force` on the target workstation
+- Offers to reboot the target workstation
+
+The DC-side version requires WinRM/PowerShell Remoting to work. If the trust is too broken for remote access, use the host-side version locally on the affected PC.
+
+### Domain Trust Repair: what these scripts do not do
+
+- Do not unjoin the domain
+- Do not rejoin the domain
+- Do not blindly reset the AD computer account
+- Do not reset user passwords
+- Do not force user logout
+- Do not delete user profiles
+- Do not delete cached domain logon data
+- Do not delete Credential Manager entries
+- Do not change local administrator passwords
+
+They repair the machine secure channel. They are not identity demolition tools.
 
 ## Recommended field workflow
 
@@ -280,8 +251,9 @@ For a Windows 11 Home machine that needs RDP support:
 11. Run Startup App Checker if startup items need manual review.
 12. Run Print Queue Cleaner when print jobs are stuck before power-cycling printers.
 13. Run Network Fuzz Buster when DNS, DHCP, proxy, TCP/IP, Winsock, or saved credential weirdness is suspected.
+14. Use the host-side or DC-side Domain Trust Repair scripts when a domain-joined machine appears to have lost its trust relationship.
 
-## Install/run standard maintenance from local copy
+## Install/run from local copy
 
 Create the Blue Ridge folder:
 
@@ -289,20 +261,14 @@ Create the Blue Ridge folder:
 New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
 ```
 
-Open the target file in Notepad:
-
-```powershell
-notepad "C:\ProgramData\BlueRidge\blue-ridge-win11-tuneup.ps1"
-```
-
-Paste the script contents, save, then run from an elevated PowerShell session:
+Open the target file in Notepad, paste the script contents, save, then run from an elevated PowerShell session:
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-win11-tuneup.ps1"
+& "C:\ProgramData\BlueRidge\<script-name>.ps1"
 ```
 
-After the script finishes, set the password manually:
+For the standard maintenance script, set the password manually after it finishes:
 
 ```powershell
 net user Blue-Ridge *
@@ -312,90 +278,6 @@ Optional: hide the maintenance folder after setup:
 
 ```powershell
 attrib +h "C:\ProgramData\BlueRidge"
-```
-
-## Install/run monthly Windows Update enforcer from local copy
-
-Create the Blue Ridge folder:
-
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-```
-
-Open the target file in Notepad:
-
-```powershell
-notepad "C:\ProgramData\BlueRidge\blue-ridge-windows-update-enforcer-install.ps1"
-```
-
-Paste the script contents, save, then run from an elevated PowerShell session:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-windows-update-enforcer-install.ps1"
-```
-
-## Install/run Startup App Checker from local copy
-
-Create the Blue Ridge folder:
-
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-```
-
-Open the target file in Notepad:
-
-```powershell
-notepad "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
-```
-
-Paste the script contents, save, then run from an elevated PowerShell session:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
-```
-
-## Install/run Print Queue Cleaner from local copy
-
-Create the Blue Ridge folder:
-
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-```
-
-Open the target file in Notepad:
-
-```powershell
-notepad "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
-```
-
-Paste the script contents, save, then run from an elevated PowerShell session:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
-```
-
-## Install/run Network Fuzz Buster from local copy
-
-Create the Blue Ridge folder:
-
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-```
-
-Open the target file in Notepad:
-
-```powershell
-notepad "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
-```
-
-Paste the script contents, save, then run from an elevated PowerShell session:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
 ```
 
 ## Quick download from GitHub
@@ -411,12 +293,6 @@ Invoke-WebRequest `
   -OutFile "C:\ProgramData\BlueRidge\blue-ridge-win11-tuneup.ps1"
 Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-win11-tuneup.ps1"
-```
-
-Then:
-
-```powershell
-net user Blue-Ridge *
 ```
 
 ### Monthly Windows Update enforcer
@@ -463,58 +339,50 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 & "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
 ```
 
+### Host Domain Trust Repair
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-host-domain-trust-repair.ps1" `
+  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-host-domain-trust-repair.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-host-domain-trust-repair.ps1"
+```
+
+### DC Domain Trust Repair
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-dc-domain-trust-repair.ps1" `
+  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-dc-domain-trust-repair.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\blue-ridge-dc-domain-trust-repair.ps1"
+```
+
 ## Scheduled tasks
 
 ### Standard maintenance
 
-Task name:
-
 ```text
 Blue Ridge Twice Weekly Maintenance
-```
-
-Schedule:
-
-```text
 Tuesday at 2:00 AM
 Friday at 2:00 AM
+Runs: C:\ProgramData\BlueRidge\br-maintenance.ps1
 ```
-
-Runs:
-
-```text
-C:\ProgramData\BlueRidge\br-maintenance.ps1
-```
-
-The installer checks whether the task already exists. If it does, the script leaves the existing task alone instead of recreating it every time.
 
 ### Monthly Windows Update enforcer
 
-Task name:
-
 ```text
 Blue Ridge Monthly Windows Update Enforcer
-```
-
-Schedule:
-
-```text
 3rd Sunday of every month at 2:00 AM
+Runs: C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1
 ```
 
-Runs:
-
-```text
-C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1
-```
-
-The installer checks whether the task already exists. If it does, the script leaves the existing task alone.
-
-Startup App Checker, Print Queue Cleaner, and Network Fuzz Buster are interactive/manual tools and do not create scheduled tasks.
+Startup App Checker, Print Queue Cleaner, Network Fuzz Buster, and the Domain Trust Repair scripts are interactive/manual tools and do not create scheduled tasks.
 
 ## Logs and review files
-
-Minimal logs and review files are stored here:
 
 ```text
 C:\ProgramData\BlueRidge\Logs\setup.log
@@ -524,6 +392,8 @@ C:\ProgramData\BlueRidge\Logs\windows-update-enforcer.log
 C:\ProgramData\BlueRidge\Logs\startup-app-checker.log
 C:\ProgramData\BlueRidge\Logs\print-queue-cleaner.log
 C:\ProgramData\BlueRidge\Logs\network-fuzz-buster.log
+C:\ProgramData\BlueRidge\Logs\host-domain-trust-repair.log
+C:\ProgramData\BlueRidge\Logs\dc-domain-trust-repair.log
 C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv
 C:\ProgramData\BlueRidge\StartupAppChecker\DisabledStartupItems\
 C:\ProgramData\BlueRidge\NetworkFuzzBuster\credential-review.csv
@@ -534,71 +404,29 @@ The logs are intentionally simple. They record maintenance actions and errors. T
 
 ## Useful verification commands
 
-Check SSH and RDP services:
-
 ```powershell
 Get-Service sshd,TermService
-```
-
-Check Blue Ridge firewall rules:
-
-```powershell
 Get-NetFirewallRule -DisplayName '*Blue Ridge*'
-```
-
-Check local groups:
-
-```powershell
 Get-LocalGroupMember 'Administrators'
 Get-LocalGroupMember 'Remote Desktop Users'
-```
-
-Check the standard maintenance task:
-
-```powershell
 Get-ScheduledTask 'Blue Ridge Twice Weekly Maintenance'
-(Get-ScheduledTask 'Blue Ridge Twice Weekly Maintenance').Triggers
-```
-
-Check the monthly Windows Update enforcer task:
-
-```powershell
 schtasks /Query /TN "Blue Ridge Monthly Windows Update Enforcer" /V /FO LIST
 ```
 
-Run the monthly Windows Update enforcer manually:
-
-```powershell
-PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1"
-```
-
-Run Startup App Checker manually:
+Run tools manually:
 
 ```powershell
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
-```
-
-Run Print Queue Cleaner manually:
-
-```powershell
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
-```
-
-Run Network Fuzz Buster manually:
-
-```powershell
 PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
+PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-host-domain-trust-repair.ps1"
+PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-dc-domain-trust-repair.ps1"
 ```
 
-Test SSH:
+Test SSH/RDP:
 
 ```powershell
 ssh Blue-Ridge@<laptop-ip>
-```
-
-Test RDP:
-
-```powershell
 mstsc /v:<laptop-ip>
 ```
 
@@ -616,6 +444,7 @@ This repo favors maintenance that is defensible, boring, and useful:
 - Make startup changes reviewable and admin-confirmed
 - Keep print repair safe before moving to driver, port, or vendor-tool work
 - Keep network repair safe before moving to adapter removal, VPN repair, domain repair, or profile work
+- Repair domain trust without immediately doing the full unjoin/rejoin dance
 - Create repeatable maintenance that other admins can inspect and extend
 
 More aggressive scripts can be added later for power users, lab machines, or deep-repair situations. Those should live as separate scripts so the standard baseline stays safe.
@@ -631,6 +460,7 @@ Possible future scripts:
 - Battery health report
 - Deep printer repair helper
 - Deep network repair helper
+- Domain trust diagnostics helper
 - Defender offline scan launcher
 - Student laptop tune-up variant
 
