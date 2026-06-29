@@ -52,6 +52,8 @@ Recommended approach:
 5. Review the terminal output and the log file under `C:\ProgramData\BlueRidge\Logs`.
 6. Reboot when a script recommends it.
 
+For practical field notes, see [`RUNBOOK.md`](RUNBOOK.md).
+
 ## Script details
 
 ### Windows 11 Standard Maintenance
