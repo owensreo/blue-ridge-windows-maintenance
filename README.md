@@ -1,438 +1,150 @@
 # Blue Ridge Windows Maintenance
 
-Practical Windows maintenance scripts for field work, student laptops, home PCs, and small business workstations.
+A practical Windows administration toolkit from **Blue Ridge Systems** for field support, small business workstations, student laptops, and general Windows maintenance work.
 
-This repository is intended to be a clean, reusable toolbox for Blue Ridge Systems style Windows maintenance: safe first, useful always, and aggressive only when the person running it knows exactly why.
+This repository focuses on safe, inspectable PowerShell scripts that help resolve common Windows support issues without immediately jumping to destructive repairs, profile rebuilds, app removals, or full system resets.
 
-## Scripts
+## Purpose
 
-### `scripts/blue-ridge-win11-standard-maintenance.ps1`
+The scripts in this repository are designed for administrators who need repeatable first-pass repair tools for common Windows problems. The emphasis is on conservative maintenance, clear prompts, local logging, and preserving user data.
 
-A Windows 11 standard maintenance baseline designed for student, home, and light business PCs.
+## Goals
 
-It is intentionally not a registry cleaner, debloater, service killer, or app removal script. The goal is to clean and repair Windows without breaking school software, exam tools, business apps, scanners, printers, Etsy or seller tools, VPN clients, weird class software, or anything else that may depend on Windows services behaving normally.
+- Provide PowerShell scripts that can be reviewed before use
+- Favor safe first-pass repair steps before deeper remediation
+- Preserve user files, browser data, Outlook data, Windows profiles, and business or school applications
+- Keep Windows Update, Microsoft Defender, and core Windows services enabled
+- Avoid unnecessary app removal, service disabling, profile deletion, or domain rejoin work
+- Keep logs simple and local under `C:\ProgramData\BlueRidge\Logs`
 
-### `scripts/blue-ridge-windows-update-enforcer-install.ps1`
+## Script catalog
 
-A monthly Windows Update enforcement installer.
+| Script | Purpose |
+|---|---|
+| `scripts/blue-ridge-win11-standard-maintenance.ps1` | Windows 11 baseline maintenance, repair, remote access setup, Defender tuning, cache cleanup, DISM/SFC, and scheduled maintenance |
+| `scripts/blue-ridge-windows-update-enforcer-install.ps1` | Monthly Windows Update enforcement using built-in Windows Update components |
+| `scripts/blue-ridge-startup-app-checker.ps1` | Review-based startup app audit and disable workflow |
+| `scripts/blue-ridge-print-queue-cleaner.ps1` | Safe print queue cleanup before deeper printer repair |
+| `scripts/blue-ridge-network-fuzz-buster.ps1` | DNS, NetBIOS, ARP, Winsock, TCP/IP, proxy, Kerberos, and saved credential cleanup workflow |
+| `scripts/blue-ridge-outlook-teams-soft-reset.ps1` | Safe first-pass Outlook, Teams, and Microsoft 365 desktop app repair helper |
+| `scripts/blue-ridge-host-domain-trust-repair.ps1` | Host-side domain secure-channel repair from the affected workstation |
+| `scripts/blue-ridge-dc-domain-trust-repair.ps1` | DC-side domain trust repair orchestration over PowerShell Remoting |
 
-It writes a local update runner to `C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1`, creates a scheduled task for the **3rd Sunday of every month at 2:00 AM**, installs pending Windows software updates, retries failed updates one time, ignores anything still failing after the retry, and forces a reboot after updates install or a pending reboot is detected.
+## Requirements
 
-### `scripts/blue-ridge-startup-app-checker.ps1`
+- Windows 10 or Windows 11 for most workstation scripts
+- Windows PowerShell 5.1 or newer
+- Administrator rights
+- Domain scripts require a domain-joined environment
+- DC-side domain trust repair requires WinRM/PowerShell Remoting to the target workstation
+- Microsoft 365/Office update functions require Click-to-Run Office when using `OfficeC2RClient.exe`
 
-A conservative startup app review tool.
+## Usage
 
-It finds common startup items, writes them to a reviewable CSV, opens the CSV in Notepad, lets the admin mark `Y` or `N` in a `Disable` column, then requires a final `DISABLE` confirmation before making changes. It does not disable Windows services.
+Review each script before running it. These tools are intended for administrators who understand the effects of the commands they execute.
 
-### `scripts/blue-ridge-print-queue-cleaner.ps1`
+Recommended approach:
 
-A safe Windows-side print queue cleanup utility.
+1. Clone or download this repository.
+2. Review the script you plan to use.
+3. Copy the script to the target machine when appropriate.
+4. Run from an elevated PowerShell session.
+5. Review the terminal output and the log file under `C:\ProgramData\BlueRidge\Logs`.
+6. Reboot when a script recommends it.
 
-It clears stuck print jobs, restarts the Print Spooler, clears the spool folder, and shows printer/queue status before and after cleanup. It is meant to be run before power-cycling printers or doing deeper driver/port repair.
+## Script details
 
-### `scripts/blue-ridge-network-fuzz-buster.ps1`
+### Windows 11 Standard Maintenance
 
-A safe first-pass Windows network cleanup utility.
+`blue-ridge-win11-standard-maintenance.ps1` is a general baseline script for Windows 11 support work.
 
-It flushes DNS, clears NetBIOS and ARP cache, resets Winsock, resets TCP/IP, offers DHCP release/renew, offers WinHTTP proxy reset, offers Kerberos ticket purge, and offers review-based saved credential cleanup for the current Windows user.
+It can:
 
-### `scripts/blue-ridge-outlook-teams-soft-reset.ps1`
+- Prepare a local support account named `Blue-Ridge`
+- Configure support access for RDP and OpenSSH where appropriate
+- Apply conservative power and Defender performance settings
+- Clean Windows temp, user temp, browser cache, and Recycle Bin
+- Preserve browser profiles, passwords, history, bookmarks, and extensions
+- Run Disk Cleanup, DISM component cleanup, Defender signature update, Defender quick scan, DISM RestoreHealth, and SFC
+- Create a scheduled task for twice-weekly maintenance
 
-A safe first-pass Microsoft Outlook, Microsoft Teams, and Office repair helper.
+It intentionally does not remove applications, disable Windows Update, disable Defender, delete user files, reset networking, scrape browsing history, or create a full user activity report.
 
-It closes Outlook, Teams, and Office apps, clears classic/new Teams cache, clears safe Outlook cache areas, resets the classic Outlook navigation pane, offers an Excel wake-up launch, offers a Microsoft Office Click-to-Run update, offers Office Quick Repair, offers Outlook safe mode, and offers optional Office identity cache reset.
+### Monthly Windows Update Enforcer
 
-It does **not** delete PST files, OST files by default, Outlook profiles, mail accounts, calendar entries, contacts, Teams installs, Office installs, or force the user onto new Outlook.
+`blue-ridge-windows-update-enforcer-install.ps1` installs a monthly update task.
 
-### `scripts/blue-ridge-host-domain-trust-repair.ps1`
+It uses built-in Windows Update components, starts required update services, searches for pending software updates, installs updates, retries once after failures, checks common pending-reboot locations, and reboots only when updates installed or a reboot is already pending.
 
-A host-side domain secure-channel repair tool.
-
-Run this locally on the affected domain-joined workstation. It tests and repairs the computer trust relationship with the domain using `Test-ComputerSecureChannel -Repair`, prompts for a domain repair username in PowerShell, securely prompts for the password, restarts Netlogon, purges Kerberos tickets, runs `gpupdate /force`, and offers a reboot.
-
-### `scripts/blue-ridge-dc-domain-trust-repair.ps1`
-
-A DC-side domain trust repair orchestrator.
-
-Run this from a domain controller or admin workstation with AD/RSAT tools. It asks for the target computer, verifies the AD computer object when the Active Directory module is available, checks WinRM, then remotely runs the secure-channel repair on the affected workstation. This can avoid walking to the workstation or doing a full domain rejoin when PowerShell Remoting still works.
-
-## Standard maintenance baseline: what it does
-
-- Creates a local admin account named `Blue-Ridge`
-- Adds `Blue-Ridge` to the local Administrators group
-- Adds `Blue-Ridge` and the current logged-in user to `Remote Desktop Users`
-- Enables Remote Desktop with Network Level Authentication
-- Opens firewall access for RDP on TCP `3389`
-- Installs OpenSSH Server only if it is not already installed
-- Enables and starts the `sshd` service
-- Opens firewall access for SSH on TCP `22`
-- Sets High Performance power behavior where available
-- Adjusts Microsoft Defender to be less performance-heavy without disabling protection
-- Cleans Windows temp folders
-- Cleans user temp folders
-- Cleans Microsoft Edge and Google Chrome cache areas across local profiles
-- Preserves browser bookmarks, passwords, history, extensions, preferences, and profiles
-- Clears the Recycle Bin
-- Runs Disk Cleanup using sageset/sagerun `11`
-- Runs DISM component cleanup
-- Updates Microsoft Defender signatures
-- Runs a Microsoft Defender quick scan
-- Runs `DISM /Online /Cleanup-Image /RestoreHealth`
-- Runs `sfc /scannow`
-- Forces a true defrag on `C:`
-- Opens Windows Update settings for manual review
-- Opens Microsoft Store updates for manual review
-- Creates a scheduled task that runs maintenance Tuesday and Friday at `2:00 AM`
-- Keeps minimal logs in `C:\ProgramData\BlueRidge\Logs`
-
-## Standard maintenance baseline: what it does not do
-
-- Delete user documents
-- Delete the Downloads folder
-- Delete Desktop files
-- Delete browser bookmarks
-- Delete browser passwords
-- Delete browser history
-- Delete browser extensions
-- Delete full browser profiles
-- Remove installed applications
-- Disable Windows Update
-- Disable Microsoft Defender
-- Disable arbitrary Windows services
-- Change driver packages
-- Reset networking
-- Reset Windows Update components
-- Create a full system inventory report
-- Log user activity
-- Scrape browser history
-
-That restraint is the point. This is a safe baseline, not a scorched-earth repair pass.
-
-## Windows Update enforcer
-
-The monthly Windows Update enforcer:
-
-- Uses built-in Windows Update COM objects
-- Starts/checks Windows Update related services: `wuauserv`, `bits`, `cryptsvc`, and `msiserver`
-- Searches for pending Windows software updates
-- Does not intentionally pull driver updates
-- Accepts update EULAs when required
-- Downloads and installs pending software updates
-- Retries once if updates fail
-- Ignores updates that still fail after the second pass
-- Checks common pending-reboot registry locations
-- Forces a reboot in 60 seconds if updates installed or a reboot is pending
-- Creates a scheduled task named `Blue Ridge Monthly Windows Update Enforcer`
-- Schedules that task for the 3rd Sunday of every month at `2:00 AM`
-- Runs the scheduled task as `SYSTEM` with highest privileges
-
-It intentionally does not disable Windows Update services, reset Windows Update components, delete SoftwareDistribution, install third-party modules, require PSWindowsUpdate, intentionally install driver updates, loop forever, or force a reboot if nothing installed and no reboot is pending.
-
-## Startup App Checker
-
-Startup App Checker finds common startup items, exports them to `C:\ProgramData\BlueRidge\StartupAppChecker\startup-review.csv`, opens the CSV in Notepad, and lets the admin mark `Y` or `N` in the `Disable` column. It requires `DISABLE` before changing anything.
-
-It checks:
-
-- Common `Run` and `RunOnce` registry locations
-- Current-user and all-users Startup folders
-- Non-Microsoft scheduled tasks with Logon or Startup triggers
-
-It intentionally does not disable services, drivers, applications, security products by name, browser extensions, or Store app background permissions.
-
-## Print Queue Cleaner
-
-Print Queue Cleaner is a safe first-pass print cleanup tool. It:
-
-- Shows printer status before cleanup
-- Shows visible print jobs before cleanup
-- Attempts to remove print jobs using PowerShell print commands
-- Stops the Print Spooler
-- Clears `C:\Windows\System32\spool\PRINTERS`
-- Starts the Print Spooler again
-- Sets the Print Spooler startup type to Automatic
-- Attempts to resume paused printers
-- Shows printer status after cleanup
-- Shows any remaining print jobs after cleanup
-- Logs to `C:\ProgramData\BlueRidge\Logs\print-queue-cleaner.log`
-
-It intentionally does not delete printers, drivers, ports, vendor utilities, or default printer settings.
-
-## Network Fuzz Buster
-
-Network Fuzz Buster is a safe first-pass network cleanup tool. It:
-
-- Shows a network snapshot before cleanup
-- Flushes DNS with `Clear-DnsClientCache`
-- Flushes DNS with `ipconfig /flushdns`
-- Clears NetBIOS name cache with `nbtstat -R`
-- Refreshes NetBIOS registrations with `nbtstat -RR`
-- Clears ARP cache
-- Resets Winsock
-- Resets the TCP/IP stack
-- Writes a TCP/IP reset log to `C:\ProgramData\BlueRidge\NetworkFuzzBuster\tcpip-reset.log`
-- Offers DHCP release/renew
-- Offers WinHTTP proxy reset
-- Offers Kerberos ticket purge for the current logon session
-- Offers review-based saved credential cleanup through a CSV
-- Recommends reboot after Winsock and TCP/IP reset
-
-Saved credentials are per-user. If this script is run as `Blue-Ridge`, it reviews credentials visible to `Blue-Ridge`. To review the affected user's saved Credential Manager entries, run it from that user's Windows session and elevate from there.
-
-It intentionally does not delete adapters, VPN clients, Wi-Fi profiles, user profiles, certificates, passwords, cached domain logon secrets, or domain join.
-
-## Outlook Teams Soft Reset
-
-Outlook Teams Soft Reset is a safe first-pass Microsoft 365 desktop app repair helper for classic Outlook, Teams, and Office update weirdness.
-
-It:
-
-- Selects the affected local user profile
-- Closes Outlook, Teams, Excel, Word, PowerPoint, OneNote, Publisher, Visio, Access, and related Office helpers
-- Clears classic Teams cache when present
-- Clears new Teams cache when present
-- Clears Outlook RoamCache
-- Clears Outlook temporary attachment cache
-- Clears Office file cache
-- Runs classic Outlook `/resetnavpane` when Outlook is found
-- Offers to launch Excel briefly to wake Office update plumbing
-- Offers to force Microsoft Office Click-to-Run update with `OfficeC2RClient.exe /update user`
-- Offers to open the Office Quick Repair applet
-- Offers to launch classic Outlook in safe mode
-- Offers optional Office identity cache reset by moving identity/cache folders to backup
-- Logs to `C:\ProgramData\BlueRidge\Logs\outlook-teams-soft-reset.log`
-- Stores optional moved identity/cache backups under `C:\ProgramData\BlueRidge\OutlookTeamsSoftReset\Backups`
-
-It intentionally does not:
-
-- Delete PST files
-- Delete OST files by default
-- Delete Outlook profiles
-- Remove mail accounts
-- Remove calendar entries
-- Remove contacts
-- Force new Outlook
-- Uninstall Teams
-- Uninstall Office
-- Reset user passwords
-- Delete Credential Manager entries by default
-
-The Office identity cache reset is optional because it may sign the user out of Office, Outlook, Teams, OneDrive, or Microsoft 365 apps. Use it when sign-in/token weirdness is the suspected problem.
-
-## Domain Trust Repair tools
-
-### Host-side repair
-
-Use `blue-ridge-host-domain-trust-repair.ps1` when you are at the affected workstation or connected to it through RDP/remote support.
-
-It:
-
-- Confirms the machine is domain joined
-- Tests the domain secure channel
-- Prompts for a domain repair username directly in PowerShell
-- Securely prompts for that account's password
-- Runs secure-channel repair from the host
-- Restarts Netlogon
-- Purges Kerberos tickets for the current session
-- Runs `gpupdate /force`
-- Offers a reboot
-
-### DC-side repair
-
-Use `blue-ridge-dc-domain-trust-repair.ps1` when you are on a domain controller or admin workstation and want to repair a target workstation remotely.
-
-It:
-
-- Prompts for the target computer name
-- Loads the Active Directory module when available
-- Verifies the AD computer object when possible
-- Checks basic reachability
-- Checks WinRM/PowerShell Remoting
-- Prompts for a domain repair username directly in PowerShell
-- Securely prompts for that account's password
-- Remotely runs the secure-channel repair on the target workstation
-- Restarts Netlogon on the target workstation
-- Purges Kerberos tickets on the target workstation
-- Runs `gpupdate /force` on the target workstation
-- Offers to reboot the target workstation
-
-The DC-side version requires WinRM/PowerShell Remoting to work. If the trust is too broken for remote access, use the host-side version locally on the affected PC.
-
-### Domain Trust Repair: what these scripts do not do
-
-- Do not unjoin the domain
-- Do not rejoin the domain
-- Do not blindly reset the AD computer account
-- Do not reset user passwords
-- Do not force user logout
-- Do not delete user profiles
-- Do not delete cached domain logon data
-- Do not delete Credential Manager entries
-- Do not change local administrator passwords
-
-They repair the machine secure channel. They are not identity demolition tools.
-
-## Recommended field workflow
-
-For a Windows 11 Home machine that needs RDP support:
-
-1. Upgrade Windows 11 Home to Windows 11 Pro.
-2. Reboot.
-3. Open PowerShell as Administrator.
-4. Run the standard maintenance script.
-5. Set the `Blue-Ridge` password manually.
-6. Reboot again.
-7. Run Windows Update manually until fully current.
-8. Review Microsoft Store updates.
-9. Test SSH and RDP.
-10. Install the monthly Windows Update enforcer if the machine should continue receiving forced monthly update/reboot maintenance.
-11. Run Startup App Checker if startup items need manual review.
-12. Run Print Queue Cleaner when print jobs are stuck before power-cycling printers.
-13. Run Network Fuzz Buster when DNS, DHCP, proxy, TCP/IP, Winsock, or saved credential weirdness is suspected.
-14. Run Outlook Teams Soft Reset when Outlook, Teams, or Office desktop apps will not open, loop, hang, or need an update/quick repair nudge.
-15. Use the host-side or DC-side Domain Trust Repair scripts when a domain-joined machine appears to have lost its trust relationship.
-
-## Install/run from local copy
-
-Create the Blue Ridge folder:
-
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-```
-
-Open the target file in Notepad, paste the script contents, save, then run from an elevated PowerShell session:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\<script-name>.ps1"
-```
-
-For the standard maintenance script, set the password manually after it finishes:
-
-```powershell
-net user Blue-Ridge *
-```
-
-Optional: hide the maintenance folder after setup:
-
-```powershell
-attrib +h "C:\ProgramData\BlueRidge"
-```
-
-## Quick download from GitHub
-
-The repository may be private. These raw URLs work when authenticated or when the repository is public.
-
-### Standard maintenance baseline
-
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-win11-standard-maintenance.ps1" `
-  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-win11-tuneup.ps1"
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-win11-tuneup.ps1"
-```
-
-### Monthly Windows Update enforcer
-
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-windows-update-enforcer-install.ps1" `
-  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-windows-update-enforcer-install.ps1"
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-windows-update-enforcer-install.ps1"
-```
+It intentionally does not reset Windows Update components, delete `SoftwareDistribution`, require third-party modules, intentionally install driver updates, or retry forever.
 
 ### Startup App Checker
 
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-startup-app-checker.ps1" `
-  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
-```
+`blue-ridge-startup-app-checker.ps1` provides a review-first startup item workflow.
+
+It finds common Run/RunOnce registry entries, Startup folder items, and non-Microsoft scheduled tasks with Logon or Startup triggers. It exports findings to a CSV, opens the CSV in Notepad, and only disables items that the admin marks after a final confirmation.
+
+It intentionally does not disable services, drivers, applications, security products by name, browser extensions, or Store app background permissions.
 
 ### Print Queue Cleaner
 
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-print-queue-cleaner.ps1" `
-  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
-```
+`blue-ridge-print-queue-cleaner.ps1` is a safe first-pass print repair tool.
+
+It shows printer state, removes visible print jobs, stops the Print Spooler, clears the spool folder, restarts the spooler, sets the spooler to Automatic, and attempts to resume paused printers.
+
+It intentionally does not delete printers, drivers, ports, vendor printer utilities, or default printer settings.
 
 ### Network Fuzz Buster
 
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-network-fuzz-buster.ps1" `
-  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
-```
+`blue-ridge-network-fuzz-buster.ps1` is a conservative network cleanup tool.
+
+It can flush DNS, clear NetBIOS cache, refresh NetBIOS registrations, clear ARP cache, reset Winsock, reset TCP/IP, offer DHCP release/renew, offer WinHTTP proxy reset, offer Kerberos ticket purge, and offer review-based saved credential cleanup.
+
+It intentionally does not delete network adapters, VPN clients, Wi-Fi profiles, user profiles, certificates, passwords, cached domain logon secrets, or domain join.
+
+Saved credentials are per-user. To review a specific user's saved Credential Manager entries, run the script from that user's Windows session and elevate from there.
 
 ### Outlook Teams Soft Reset
 
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-outlook-teams-soft-reset.ps1" `
-  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-outlook-teams-soft-reset.ps1"
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-outlook-teams-soft-reset.ps1"
-```
+`blue-ridge-outlook-teams-soft-reset.ps1` is a safe first-pass Microsoft 365 desktop repair helper for classic Outlook, Teams, and Office update issues.
 
-### Host Domain Trust Repair
+It can close Outlook, Teams, and Office applications, clear classic and new Teams cache, clear Outlook RoamCache, clear Outlook temporary attachment cache, clear Office file cache, run classic Outlook `/resetnavpane`, offer an Excel launch to wake Office update components, offer `OfficeC2RClient.exe /update user`, open the Office Quick Repair applet, launch Outlook safe mode, and optionally move Office identity cache folders to backup.
 
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-host-domain-trust-repair.ps1" `
-  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-host-domain-trust-repair.ps1"
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-host-domain-trust-repair.ps1"
-```
+It intentionally does not delete PST files, delete OST files by default, delete Outlook profiles, remove mail accounts, remove calendar entries, remove contacts, force new Outlook, uninstall Teams, uninstall Office, reset user passwords, or delete Credential Manager entries by default.
 
-### DC Domain Trust Repair
+The Office identity cache reset is optional because it may sign the user out of Office, Outlook, Teams, OneDrive, or Microsoft 365 applications.
 
-```powershell
-New-Item -ItemType Directory -Force -Path "C:\ProgramData\BlueRidge" | Out-Null
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/owensreo/blue-ridge-windows-maintenance/main/scripts/blue-ridge-dc-domain-trust-repair.ps1" `
-  -OutFile "C:\ProgramData\BlueRidge\blue-ridge-dc-domain-trust-repair.ps1"
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& "C:\ProgramData\BlueRidge\blue-ridge-dc-domain-trust-repair.ps1"
-```
+### Domain Trust Repair
+
+This repository includes two secure-channel repair workflows.
+
+#### Host-side repair
+
+`blue-ridge-host-domain-trust-repair.ps1` runs locally on the affected domain-joined workstation.
+
+It confirms the machine is domain joined, tests the secure channel, prompts for a domain repair username, securely prompts for the password, runs secure-channel repair, restarts Netlogon, purges Kerberos tickets, runs Group Policy update, and offers a reboot.
+
+#### DC-side repair
+
+`blue-ridge-dc-domain-trust-repair.ps1` runs from a domain controller or admin workstation.
+
+It prompts for the target computer, loads the Active Directory module when available, verifies the AD computer object when possible, checks reachability, checks WinRM/PowerShell Remoting, then remotely runs the secure-channel repair on the target workstation.
+
+The DC-side version requires WinRM/PowerShell Remoting. If the trust is too broken for remote access, use the host-side version locally on the affected PC.
+
+The domain trust scripts intentionally do not unjoin the domain, rejoin the domain, blindly reset the AD computer account, reset user passwords, force logout, delete user profiles, delete cached domain logon data, delete Credential Manager entries, or change local administrator passwords.
 
 ## Scheduled tasks
 
-### Standard maintenance
+The standard maintenance script creates a twice-weekly maintenance task.
 
-```text
-Blue Ridge Twice Weekly Maintenance
-Tuesday at 2:00 AM
-Friday at 2:00 AM
-Runs: C:\ProgramData\BlueRidge\br-maintenance.ps1
-```
+The monthly update enforcer creates a monthly Windows Update task.
 
-### Monthly Windows Update enforcer
+All other scripts are interactive/manual tools and do not create scheduled tasks.
 
-```text
-Blue Ridge Monthly Windows Update Enforcer
-3rd Sunday of every month at 2:00 AM
-Runs: C:\ProgramData\BlueRidge\br-windows-update-enforcer.ps1
-```
+## Logs and local files
 
-Startup App Checker, Print Queue Cleaner, Network Fuzz Buster, Outlook Teams Soft Reset, and the Domain Trust Repair scripts are interactive/manual tools and do not create scheduled tasks.
-
-## Logs and review files
+Common log and review paths:
 
 ```text
 C:\ProgramData\BlueRidge\Logs\setup.log
@@ -452,42 +164,25 @@ C:\ProgramData\BlueRidge\NetworkFuzzBuster\tcpip-reset.log
 C:\ProgramData\BlueRidge\OutlookTeamsSoftReset\Backups\
 ```
 
-The logs are intentionally simple. They record maintenance actions and errors. They do not collect a full system inventory or user activity.
+Logs are intentionally simple. They record script actions and errors. They are not intended to collect user activity, browser history, personal files, or full system inventory data.
 
-## Useful verification commands
+## Recommended support workflow
 
-```powershell
-Get-Service sshd,TermService
-Get-NetFirewallRule -DisplayName '*Blue Ridge*'
-Get-LocalGroupMember 'Administrators'
-Get-LocalGroupMember 'Remote Desktop Users'
-Get-ScheduledTask 'Blue Ridge Twice Weekly Maintenance'
-schtasks /Query /TN "Blue Ridge Monthly Windows Update Enforcer" /V /FO LIST
-```
+For a typical Windows workstation support visit:
 
-Run tools manually:
+1. Review the device state and confirm user impact.
+2. Run the least invasive script that matches the issue.
+3. Confirm what the script will and will not change.
+4. Run from an elevated PowerShell session.
+5. Review the script output and local log.
+6. Reboot when the script recommends it.
+7. Escalate to deeper repair only when the safe first-pass workflow does not resolve the issue.
 
-```powershell
-PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-startup-app-checker.ps1"
-PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-print-queue-cleaner.ps1"
-PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-network-fuzz-buster.ps1"
-PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-outlook-teams-soft-reset.ps1"
-PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-host-domain-trust-repair.ps1"
-PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\BlueRidge\blue-ridge-dc-domain-trust-repair.ps1"
-```
+## Safety principles
 
-Test SSH/RDP:
+This repository favors maintenance that is clear, conservative, and practical:
 
-```powershell
-ssh Blue-Ridge@<laptop-ip>
-mstsc /v:<laptop-ip>
-```
-
-## Design philosophy
-
-This repo favors maintenance that is defensible, boring, and useful:
-
-- Repair Windows before blaming the hardware
+- Repair Windows before blaming hardware
 - Clean safe cache locations without touching user data
 - Preserve school and business software compatibility
 - Keep Microsoft Defender enabled
@@ -495,17 +190,14 @@ This repo favors maintenance that is defensible, boring, and useful:
 - Avoid disabling services unless there is a named problem
 - Separate normal maintenance from forced update/reboot behavior
 - Make startup changes reviewable and admin-confirmed
-- Keep print repair safe before moving to driver, port, or vendor-tool work
+- Keep printer repair safe before moving to driver, port, or vendor-tool work
 - Keep network repair safe before moving to adapter removal, VPN repair, domain repair, or profile work
-- Fix Microsoft 365 desktop weirdness without destroying Outlook data or forcing new Outlook
-- Repair domain trust without immediately doing the full unjoin/rejoin dance
-- Create repeatable maintenance that other admins can inspect and extend
-
-More aggressive scripts can be added later for power users, lab machines, or deep-repair situations. Those should live as separate scripts so the standard baseline stays safe.
+- Fix Microsoft 365 desktop issues without destroying Outlook data or forcing new Outlook
+- Repair domain trust before doing a full unjoin/rejoin cycle
 
 ## Roadmap ideas
 
-Possible future scripts:
+Possible future additions:
 
 - Business workstation baseline
 - Deep repair mode
@@ -521,4 +213,8 @@ Possible future scripts:
 
 ## Disclaimer
 
-Review scripts before running them on customer machines. Test in a VM or non-critical machine when changing behavior. This repository is intended for administrators who understand the effects of the commands they run.
+Review scripts before running them on customer or production machines. Test in a virtual machine or non-critical environment when changing behavior. This repository is intended for administrators who understand the effects of the PowerShell commands they run.
+
+## Security
+
+This public repository is regularly scanned by **Aikido Security** for vulnerabilities.
