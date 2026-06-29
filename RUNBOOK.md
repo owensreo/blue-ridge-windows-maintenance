@@ -57,6 +57,23 @@ Alternate field pattern:
 
 Use the script-running and execution policy standards approved for the environment you are supporting. Do not run unreviewed scripts directly from the internet.
 
+## PowerShell-friendly local run parameters
+
+When a reviewed script has been copied to `C:\ProgramData\BlueRidge`, this is the standard field run pattern:
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+& "C:\ProgramData\BlueRidge\<script-name>.ps1"
+```
+
+Notes:
+
+- `-Scope Process` keeps the execution policy change limited to the current PowerShell session.
+- `-Force` keeps the command from stopping for an execution policy confirmation prompt.
+- Replace `<script-name>` with the actual script file name.
+- Run from an elevated PowerShell session.
+- Review the script before running it.
+
 ## Script index
 
 ```text
