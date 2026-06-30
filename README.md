@@ -1,7 +1,5 @@
 # Blue Ridge Windows Maintenance
 
-[![Aikido Security Audit Report](https://app.aikido.dev/assets/badges/label-only-light-theme.svg)](https://app.aikido.dev/audit-report/external/WUuAYeTGe5MdKOz7TJTyBMJl/request)
-
 A practical Windows administration toolkit from **Blue Ridge Systems** for field support, small business workstations, student laptops, and general Windows maintenance work.
 
 This repository focuses on safe, inspectable PowerShell scripts that help resolve common Windows support issues without immediately jumping to destructive repairs, profile rebuilds, app removals, or full system resets.
@@ -68,7 +66,7 @@ It can:
 - Configure support access for RDP and OpenSSH where appropriate
 - Apply conservative power and Defender performance settings
 - Clean Windows temp, user temp, browser cache, and Recycle Bin
-- Preserve browser profiles, passwords, history, bookmarks, and extensions
+- Preserve browser profiles, saved sign-in data, history, bookmarks, and extensions
 - Run Disk Cleanup, DISM component cleanup, Defender signature update, Defender quick scan, DISM RestoreHealth, and SFC
 - Create a scheduled task for twice-weekly maintenance
 
@@ -104,7 +102,7 @@ It intentionally does not delete printers, drivers, ports, vendor printer utilit
 
 It can flush DNS, clear NetBIOS cache, refresh NetBIOS registrations, clear ARP cache, reset Winsock, reset TCP/IP, offer DHCP release/renew, offer WinHTTP proxy reset, offer Kerberos ticket purge, and offer review-based saved credential cleanup.
 
-It intentionally does not delete network adapters, VPN clients, Wi-Fi profiles, user profiles, certificates, passwords, cached domain logon secrets, or domain join.
+It intentionally does not delete network adapters, VPN clients, Wi-Fi profiles, user profiles, certificates, saved sign-in data, cached domain logon data, or domain join.
 
 Saved credentials are per-user. To review a specific user's saved Credential Manager entries, run the script from that user's Windows session and elevate from there.
 
@@ -114,7 +112,7 @@ Saved credentials are per-user. To review a specific user's saved Credential Man
 
 It can close Outlook, Teams, and Office applications, clear classic and new Teams cache, clear Outlook RoamCache, clear Outlook temporary attachment cache, clear Office file cache, run classic Outlook `/resetnavpane`, offer an Excel launch to wake Office update components, offer `OfficeC2RClient.exe /update user`, open the Office Quick Repair applet, launch Outlook safe mode, and optionally move Office identity cache folders to backup.
 
-It intentionally does not delete PST files, delete OST files by default, delete Outlook profiles, remove mail accounts, remove calendar entries, remove contacts, force new Outlook, uninstall Teams, uninstall Office, reset user passwords, or delete Credential Manager entries by default.
+It intentionally does not delete PST files, delete OST files by default, delete Outlook profiles, remove mail accounts, remove calendar entries, remove contacts, force new Outlook, uninstall Teams, uninstall Office, change user sign-in credentials, or delete Credential Manager entries by default.
 
 The Office identity cache reset is optional because it may sign the user out of Office, Outlook, Teams, OneDrive, or Microsoft 365 applications.
 
@@ -126,7 +124,7 @@ This repository includes two secure-channel repair workflows.
 
 `blue-ridge-host-domain-trust-repair.ps1` runs locally on the affected domain-joined workstation.
 
-It confirms the machine is domain joined, tests the secure channel, prompts for a domain repair username, securely prompts for the password, runs secure-channel repair, restarts Netlogon, purges Kerberos tickets, runs Group Policy update, and offers a reboot.
+It confirms the machine is domain joined, tests the secure channel, prompts for domain repair credentials, runs secure-channel repair, restarts Netlogon, purges Kerberos tickets, runs Group Policy update, and offers a reboot.
 
 #### DC-side repair
 
@@ -136,7 +134,7 @@ It prompts for the target computer, loads the Active Directory module when avail
 
 The DC-side version requires WinRM/PowerShell Remoting. If the trust is too broken for remote access, use the host-side version locally on the affected PC.
 
-The domain trust scripts intentionally do not unjoin the domain, rejoin the domain, blindly reset the AD computer account, reset user passwords, force logout, delete user profiles, delete cached domain logon data, delete Credential Manager entries, or change local administrator passwords.
+The domain trust scripts intentionally do not unjoin the domain, rejoin the domain, blindly reset the AD computer account, change user sign-in credentials, force logout, delete user profiles, delete cached domain logon data, delete Credential Manager entries, or change local administrator credentials.
 
 ## Scheduled tasks
 
@@ -220,5 +218,7 @@ Possible future additions:
 Review scripts before running them on customer or production machines. Test in a virtual machine or non-critical environment when changing behavior. This repository is intended for administrators who understand the effects of the PowerShell commands they run.
 
 ## Security
+
+[![Aikido Security Audit Report](https://app.aikido.dev/assets/badges/label-only-light-theme.svg)](https://app.aikido.dev/audit-report/external/WUuAYeTGe5MdKOz7TJTyBMJl/request)
 
 This public repository is regularly scanned by **Aikido Security** for vulnerabilities.
