@@ -1,5 +1,7 @@
 # Blue Ridge Windows Maintenance
 
+[![Aikido Security Audit Report](https://app.aikido.dev/assets/badges/label-only-light-theme.svg)](https://app.aikido.dev/audit-report/external/WUuAYeTGe5MdKOz7TJTyBMJl/request)
+
 A practical Windows administration toolkit from **Blue Ridge Systems** for field support, small business workstations, student laptops, and general Windows maintenance work.
 
 This repository focuses on safe, inspectable PowerShell scripts that help resolve common Windows support issues without immediately jumping to destructive repairs, profile rebuilds, app removals, or full system resets.
