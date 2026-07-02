@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/blue-ridge-systems-consulting-logo.svg" alt="Blue Ridge Systems Consulting Logo" width="160" />
+</p>
+
 # Blue Ridge Windows Maintenance
 
 A practical Windows administration toolkit from **Blue Ridge Systems** for field support, small business workstations, student laptops, and general Windows maintenance work.
@@ -212,6 +216,10 @@ Possible future additions:
 - Outlook profile rebuild helper
 - Defender offline scan launcher
 - Student laptop tune-up variant
+
+## Branding
+
+This repository includes Blue Ridge Systems Consulting branding assets. See [`BRANDING.md`](BRANDING.md) for logo and brand usage guidance.
 
 ## Disclaimer
 
