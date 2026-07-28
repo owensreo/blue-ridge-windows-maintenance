@@ -9,6 +9,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $disabledFolder = Join-Path $ToolRoot 'DisabledStartupItems'
 $reviewCsv = Join-Path $ToolRoot 'startup-review.csv'
+$disabledFolderCsv = Join-Path $ToolRoot 'disabled-startup-folder-items.csv'
+$disabledTaskCsv = Join-Path $ToolRoot 'disabled-scheduled-tasks.csv'
 $logDir = 'C:\ProgramData\BlueRidge\Logs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 $log = Join-Path $logDir 'startup-app-restore.log'
@@ -37,6 +39,19 @@ function Get-RegistryBackups {
 
 function Get-FolderBackups {
     if (-not (Test-Path $disabledFolder)) { return @() }
+    if (Test-Path $disabledFolderCsv) {
+        foreach ($item in Import-Csv $disabledFolderCsv) {
+            if (Test-Path $item.BackupPath) {
+                [pscustomobject]@{
+                    Type='Startup Folder'; DisplayName=$item.Name; BackupPath=$item.BackupPath
+                    OriginalPath=$item.OriginalPath; OriginalName=$item.Name; OriginalCommand=$null
+                }
+            }
+        }
+        return
+    }
+
+    # Compatibility fallback for backups created before metadata tracking existed.
     $review = if (Test-Path $reviewCsv) { @(Import-Csv $reviewCsv) } else { @() }
     foreach ($file in Get-ChildItem $disabledFolder -File -ErrorAction SilentlyContinue) {
         $originalName = $file.Name -replace '^\d{8}-\d{6}-',''
@@ -49,18 +64,22 @@ function Get-FolderBackups {
 }
 
 function Get-TaskBackups {
-    if (-not (Test-Path $reviewCsv)) { return @() }
-    foreach ($item in Import-Csv $reviewCsv | Where-Object { $_.Source -eq 'Scheduled Task' }) {
-        $full = [string]$item.Path
-        $idx = $full.LastIndexOf('\')
-        if ($idx -lt 0) { continue }
-        $taskPath = $full.Substring(0,$idx+1)
-        $taskName = $full.Substring($idx+1)
-        $task = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+    if (-not (Test-Path $disabledTaskCsv)) { return @() }
+    foreach ($item in Import-Csv $disabledTaskCsv) {
+        $task = Get-ScheduledTask -TaskName $item.TaskName -TaskPath $item.TaskPath -ErrorAction SilentlyContinue
         if ($task -and $task.State -eq 'Disabled') {
-            [pscustomobject]@{ Type='Scheduled Task'; DisplayName=$full; BackupPath=$null; OriginalPath=$full; TaskName=$taskName; TaskPath=$taskPath }
+            $full = if ($item.OriginalPath) { $item.OriginalPath } else { "$($item.TaskPath)$($item.TaskName)" }
+            [pscustomobject]@{ Type='Scheduled Task'; DisplayName=$full; BackupPath=$null; OriginalPath=$full; TaskName=$item.TaskName; TaskPath=$item.TaskPath }
         }
     }
+}
+
+function Remove-CsvRecord {
+    param([string]$Path,[scriptblock]$Keep)
+    if (-not (Test-Path $Path)) { return }
+    $remaining = @(Import-Csv $Path | Where-Object $Keep)
+    if ($remaining.Count -gt 0) { $remaining | Export-Csv $Path -NoTypeInformation -Encoding UTF8 }
+    else { Remove-Item $Path -Force }
 }
 
 try {
@@ -94,10 +113,12 @@ try {
                     if (-not $item.OriginalPath) { throw 'Original Startup-folder path is unavailable in startup-review.csv.' }
                     New-Item -ItemType Directory -Path (Split-Path $item.OriginalPath -Parent) -Force | Out-Null
                     Move-Item $item.BackupPath $item.OriginalPath -Force
+                    Remove-CsvRecord -Path $disabledFolderCsv -Keep { $_.BackupPath -ne $item.BackupPath }
                     Write-Ok "Restored Startup-folder item: $($item.DisplayName)"
                 }
                 'Scheduled Task' {
                     Enable-ScheduledTask -TaskName $item.TaskName -TaskPath $item.TaskPath -ErrorAction Stop | Out-Null
+                    Remove-CsvRecord -Path $disabledTaskCsv -Keep { $_.TaskName -ne $item.TaskName -or $_.TaskPath -ne $item.TaskPath }
                     Write-Ok "Enabled scheduled task: $($item.DisplayName)"
                 }
             }

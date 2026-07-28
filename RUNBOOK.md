@@ -74,7 +74,9 @@ Notes:
 - Run from an elevated PowerShell session.
 - Review the script before running it.
 
-## Script index
+## Core script index
+
+The repository `README.md` contains the complete categorized index. These are the original core field scripts:
 
 ```text
 blue-ridge-win11-standard-maintenance.ps1
@@ -130,7 +132,7 @@ During the run:
 
 After running:
 
-- Set the `Blue-Ridge` account password manually if the script created or prepared that account.
+- Confirm the `Blue-Ridge` account was created with the strong password supplied during the run.
 - Confirm RDP or SSH only if those features were intended.
 - Review the logs.
 - Reboot if recommended.

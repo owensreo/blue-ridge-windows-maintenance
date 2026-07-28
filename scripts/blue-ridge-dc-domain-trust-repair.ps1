@@ -1,4 +1,5 @@
 #requires -RunAsAdministrator
+#requires -Version 5.1
 <#
 Blue Ridge DC Domain Trust Repair
 
@@ -108,8 +109,32 @@ $TargetComputer = Resolve-TargetComputer -ComputerName $targetInput
 
 Write-BRLog "Target computer entered: $TargetComputer"
 
-$DomainName = (Get-CimInstance Win32_ComputerSystem).Domain
-$DefaultDC = $env:COMPUTERNAME
+$computerSystem = Get-CimInstance Win32_ComputerSystem
+$DomainName = $computerSystem.Domain
+
+if (-not $computerSystem.PartOfDomain) {
+    Write-BRLog "This computer is not domain joined. Cannot discover a repair domain controller."
+    Write-Host "This computer is not domain joined. Run this tool from a domain-joined admin workstation or DC."
+    exit 1
+}
+
+$DefaultDC = $null
+try {
+    if ($adModuleAvailable) {
+        $DefaultDC = (Get-ADDomainController -Discover -DomainName $DomainName -ErrorAction Stop).HostName
+    } else {
+        $discovered = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().FindDomainController()
+        $DefaultDC = $discovered.Name
+    }
+} catch {
+    Write-BRLog "Could not discover a domain controller automatically: $($_.Exception.Message)"
+}
+
+if ([string]::IsNullOrWhiteSpace($DefaultDC)) {
+    Write-BRLog "No domain controller was discovered. Stopping rather than targeting the local computer."
+    Write-Host "No domain controller was discovered. Verify DNS/domain connectivity and try again."
+    exit 1
+}
 
 Write-Host ""
 Write-Host "Detected domain:"

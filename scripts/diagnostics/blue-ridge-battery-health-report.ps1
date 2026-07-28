@@ -10,7 +10,7 @@ try{
  $static=Get-CimInstance -Namespace root\wmi -Class BatteryStaticData -ErrorAction SilentlyContinue
  $full=Get-CimInstance -Namespace root\wmi -Class BatteryFullChargedCapacity -ErrorAction SilentlyContinue
  $cycles=Get-CimInstance -Namespace root\wmi -Class BatteryCycleCount -ErrorAction SilentlyContinue
- $rows=@();foreach($s in $static){$f=$full|Where InstanceName -eq $s.InstanceName|Select -First 1;$c=$cycles|Where InstanceName -eq $s.InstanceName|Select -First 1;$design=[double]$s.DesignedCapacity;$fc=[double]$f.FullChargedCapacity;$health=if($design -gt 0){[math]::Round(($fc/$design)*100,1)}else{$null};$rows+=[pscustomobject]@{Instance=$s.InstanceName;Manufacturer=$s.ManufactureName;Serial=$s.SerialNumber;DesignCapacitymWh=$design;FullChargeCapacitymWh=$fc;HealthPercent=$health;CycleCount=$c.CycleCount}}
+ $rows=@();foreach($s in $static){$f=$full|Where InstanceName -eq $s.InstanceName|Select -First 1;$c=$cycles|Where InstanceName -eq $s.InstanceName|Select -First 1;$design=[double]$s.DesignedCapacity;$fc=if($f){[double]$f.FullChargedCapacity}else{$null};$health=if($design -gt 0 -and $null -ne $fc){[math]::Round(($fc/$design)*100,1)}else{$null};$rows+=[pscustomobject]@{Instance=$s.InstanceName;Manufacturer=$s.ManufactureName;Serial=$s.SerialNumber;DesignCapacitymWh=$design;FullChargeCapacitymWh=$fc;HealthPercent=$health;CycleCount=if($c){$c.CycleCount}else{$null}}}
  $rows|Export-Csv (Join-Path $dir 'battery-summary.csv') -NoTypeInformation -Encoding UTF8
  powercfg /getactivescheme|Out-File (Join-Path $dir 'active-power-plan.txt');powercfg /availablesleepstates|Out-File (Join-Path $dir 'sleep-states.txt')
  $rows|Format-Table -AutoSize|Out-String|Set-Content (Join-Path $dir 'summary.txt')

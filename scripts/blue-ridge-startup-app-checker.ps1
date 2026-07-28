@@ -1,4 +1,5 @@
 #requires -RunAsAdministrator
+#requires -Version 5.1
 <#
 Blue Ridge Startup App Checker
 
@@ -36,6 +37,8 @@ $LogDir = "$BRRoot\Logs"
 $LogFile = "$LogDir\startup-app-checker.log"
 $ReviewCsv = "$ToolRoot\startup-review.csv"
 $DisabledStartupFolder = "$ToolRoot\DisabledStartupItems"
+$DisabledFolderCsv = "$ToolRoot\disabled-startup-folder-items.csv"
+$DisabledTaskCsv = "$ToolRoot\disabled-scheduled-tasks.csv"
 
 New-Item -ItemType Directory -Force -Path $BRRoot, $ToolRoot, $LogDir, $DisabledStartupFolder | Out-Null
 
@@ -206,8 +209,8 @@ function Get-StartupScheduledTasks {
 
             $actionsText = ($task.Actions | ForEach-Object {
                 $exe = $_.Execute
-                $args = $_.Arguments
-                "$exe $args".Trim()
+                $actionArguments = $_.Arguments
+                "$exe $actionArguments".Trim()
             }) -join " ; "
 
             $triggerText = ($task.Triggers | ForEach-Object {
@@ -253,7 +256,7 @@ function Backup-AndRemoveRegistryValue {
             return
         }
 
-        $safeName = New-SafeId -Text $Name
+        $safeName = New-SafeId -Text "$Path|$Name"
         $backupPath = Join-Path $backupRoot $safeName
 
         New-Item -ItemType Directory -Force -Path $backupPath | Out-Null
@@ -289,6 +292,13 @@ function Move-StartupFolderItem {
 
         Move-Item -Path $Path -Destination $destPath -Force -ErrorAction Stop
 
+        [pscustomobject]@{
+            Name = $Name
+            OriginalPath = $Path
+            BackupPath = $destPath
+            DisabledOn = (Get-Date).ToString("o")
+        } | Export-Csv -Path $DisabledFolderCsv -NoTypeInformation -Encoding UTF8 -Append
+
         Write-BRLog "Moved startup folder item to disabled folder: $Path -> $destPath"
     } catch {
         Write-BRLog "Failed to move startup folder item $Path : $($_.Exception.Message)"
@@ -311,6 +321,12 @@ function Disable-StartupScheduledTask {
         $taskName = $normalized.Substring($lastSlash + 1)
 
         Disable-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction Stop | Out-Null
+        [pscustomobject]@{
+            TaskName = $taskName
+            TaskPath = $taskPath
+            OriginalPath = $Path
+            DisabledOn = (Get-Date).ToString("o")
+        } | Export-Csv -Path $DisabledTaskCsv -NoTypeInformation -Encoding UTF8 -Append
         Write-BRLog "Disabled scheduled task: $Path"
     } catch {
         Write-BRLog "Failed to disable scheduled task $Path : $($_.Exception.Message)"

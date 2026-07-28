@@ -1,4 +1,5 @@
 #requires -RunAsAdministrator
+#requires -Version 5.1
 <#
 Blue Ridge Windows Update Enforcer
 
@@ -60,6 +61,8 @@ Write-BRLog "=== Blue Ridge Windows Update Enforcer installer started ==="
 # ------------------------------------------------------------
 
 $UpdateScriptContent = @'
+#requires -RunAsAdministrator
+#requires -Version 5.1
 $ErrorActionPreference = "Continue"
 
 $BRRoot  = "C:\ProgramData\BlueRidge"
@@ -129,7 +132,16 @@ function Install-PendingUpdates {
 
     $Updates = Get-PendingUpdates
 
-    if (-not $Updates -or $Updates.Count -eq 0) {
+    if ($null -eq $Updates) {
+        Write-BRLog "Update search failed on pass: $PassName"
+        return @{
+            InstalledCount = 0
+            FailedCount = 1
+            RebootRequired = $false
+        }
+    }
+
+    if ($Updates.Count -eq 0) {
         Write-BRLog "No pending software updates found on pass: $PassName"
         return @{
             InstalledCount = 0
@@ -178,6 +190,27 @@ function Install-PendingUpdates {
 
         $DownloadResult = $Downloader.Download()
         Write-BRLog "Download result code: $($DownloadResult.ResultCode)"
+
+        $DownloadedCollection = New-Object -ComObject Microsoft.Update.UpdateColl
+        for ($i = 0; $i -lt $UpdateCollection.Count; $i++) {
+            $Update = $UpdateCollection.Item($i)
+            $ItemDownloadResult = $DownloadResult.GetUpdateResult($i)
+            if ($Update.IsDownloaded -and ($ItemDownloadResult.ResultCode -eq 2 -or $ItemDownloadResult.ResultCode -eq 3)) {
+                [void]$DownloadedCollection.Add($Update)
+            } else {
+                $FailedCount++
+                Write-BRLog "Update did not download: $($Update.Title) | ResultCode: $($ItemDownloadResult.ResultCode) | HResult: $($ItemDownloadResult.HResult)"
+            }
+        }
+
+        if ($DownloadedCollection.Count -eq 0) {
+            Write-BRLog "No updates downloaded successfully on pass: $PassName"
+            return @{
+                InstalledCount = 0
+                FailedCount = $FailedCount
+                RebootRequired = $false
+            }
+        }
     } catch {
         Write-BRLog "Download failed on pass $PassName : $($_.Exception.Message)"
         return @{
@@ -188,11 +221,11 @@ function Install-PendingUpdates {
     }
 
     try {
-        Write-BRLog "Installing updates: $($UpdateCollection.Count)"
+        Write-BRLog "Installing downloaded updates: $($DownloadedCollection.Count)"
 
         $Session = New-Object -ComObject Microsoft.Update.Session
         $Installer = $Session.CreateUpdateInstaller()
-        $Installer.Updates = $UpdateCollection
+        $Installer.Updates = $DownloadedCollection
 
         $InstallResult = $Installer.Install()
 
@@ -203,8 +236,8 @@ function Install-PendingUpdates {
             $RebootRequired = $true
         }
 
-        for ($i = 0; $i -lt $UpdateCollection.Count; $i++) {
-            $Update = $UpdateCollection.Item($i)
+        for ($i = 0; $i -lt $DownloadedCollection.Count; $i++) {
+            $Update = $DownloadedCollection.Item($i)
             $UpdateResult = $InstallResult.GetUpdateResult($i)
 
             # ResultCode values commonly map like:
@@ -223,7 +256,7 @@ function Install-PendingUpdates {
         }
     } catch {
         Write-BRLog "Install failed on pass $PassName : $($_.Exception.Message)"
-        $FailedCount += $UpdateCollection.Count
+        $FailedCount += $DownloadedCollection.Count
     }
 
     Write-BRLog "=== Update install pass completed: $PassName | Installed: $InstalledCount | Failed: $FailedCount | RebootRequired: $RebootRequired ==="
@@ -309,6 +342,7 @@ if ($TotalInstalled -gt 0 -or $NeedsReboot) {
 Write-BRLog "=== Blue Ridge Windows Update Enforcer completed ==="
 '@
 
+[void][scriptblock]::Create($UpdateScriptContent)
 Set-Content -Path $UpdateScript -Value $UpdateScriptContent -Encoding UTF8
 
 Write-BRLog "Wrote update enforcer script to: $UpdateScript"
@@ -318,43 +352,28 @@ Write-BRLog "Wrote update enforcer script to: $UpdateScript"
 # Using schtasks because it cleanly supports THIRD SUN monthly syntax
 # ------------------------------------------------------------
 
-Write-BRLog "Checking for existing scheduled task: $TaskName"
+Write-BRLog "Creating or updating scheduled task for the 3rd Sunday of every month at 2:00 AM."
 
-$TaskExists = $false
+$TaskCommand = "PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File `"$UpdateScript`""
 
-try {
-    schtasks.exe /Query /TN $TaskName | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        $TaskExists = $true
-    }
-} catch {
-    $TaskExists = $false
-}
+schtasks.exe `
+    /Create `
+    /TN $TaskName `
+    /TR $TaskCommand `
+    /SC MONTHLY `
+    /MO THIRD `
+    /D SUN `
+    /ST 02:00 `
+    /RU SYSTEM `
+    /RL HIGHEST `
+    /F | Out-Null
 
-if ($TaskExists) {
-    Write-BRLog "Scheduled task already exists. Leaving it as-is: $TaskName"
+if ($LASTEXITCODE -eq 0) {
+    Write-BRLog "Scheduled task created or updated successfully: $TaskName"
 } else {
-    Write-BRLog "Creating scheduled task for the 3rd Sunday of every month at 2:00 AM."
-
-    $TaskCommand = "PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File `"$UpdateScript`""
-
-    schtasks.exe `
-        /Create `
-        /TN $TaskName `
-        /TR $TaskCommand `
-        /SC MONTHLY `
-        /MO THIRD `
-        /D SUN `
-        /ST 02:00 `
-        /RU SYSTEM `
-        /RL HIGHEST `
-        /F | Out-Null
-
-    if ($LASTEXITCODE -eq 0) {
-        Write-BRLog "Scheduled task created successfully: $TaskName"
-    } else {
-        Write-BRLog "Scheduled task creation may have failed. schtasks exit code: $LASTEXITCODE"
-    }
+    Write-BRLog "Scheduled task creation failed. schtasks exit code: $LASTEXITCODE"
+    Write-Host "The update script was written, but the scheduled task was not installed."
+    exit 1
 }
 
 Write-BRLog "=== Blue Ridge Windows Update Enforcer installer completed ==="

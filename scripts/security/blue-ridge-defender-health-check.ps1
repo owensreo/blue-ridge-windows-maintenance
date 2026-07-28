@@ -1,3 +1,4 @@
+#requires -RunAsAdministrator
 #requires -Version 5.1
 [CmdletBinding()]
 param(
@@ -16,6 +17,13 @@ Start-Transcript -Path $log -Append | Out-Null
 function Write-Info { param([string]$Text) Write-Host "[*] $Text" -ForegroundColor Cyan }
 function Write-Ok { param([string]$Text) Write-Host "[+] $Text" -ForegroundColor Green }
 function Write-WarnMsg { param([string]$Text) Write-Host "[!] $Text" -ForegroundColor Yellow }
+function Get-OptionalProperty {
+    param([object]$InputObject,[string]$Name)
+    if ($null -ne $InputObject -and $InputObject.PSObject.Properties[$Name]) {
+        return $InputObject.PSObject.Properties[$Name].Value
+    }
+    return $null
+}
 
 try {
     if (-not (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue)) {
@@ -41,7 +49,7 @@ try {
         QuickScanAgeDays = $status.QuickScanAge
         FullScanAgeDays = $status.FullScanAge
         ScanAvgCPULoadFactor = $prefs.ScanAvgCPULoadFactor
-        CloudBlockLevel = $prefs.CloudBlockLevel
+        CloudBlockLevel = (Get-OptionalProperty -InputObject $prefs -Name 'CloudBlockLevel')
         MAPSReporting = $prefs.MAPSReporting
         SubmitSamplesConsent = $prefs.SubmitSamplesConsent
         ExclusionPath = @($prefs.ExclusionPath)

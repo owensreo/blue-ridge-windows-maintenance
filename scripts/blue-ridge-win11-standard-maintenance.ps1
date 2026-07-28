@@ -1,4 +1,5 @@
 #requires -RunAsAdministrator
+#requires -Version 5.1
 <#
 Blue Ridge Windows 11 Standard Maintenance Baseline
 
@@ -15,8 +16,7 @@ Recommended use:
 1. Upgrade Windows 11 Home to Pro if RDP hosting is needed
 2. Reboot
 3. Run this script elevated
-4. Set the Blue-Ridge password manually:
-       net user Blue-Ridge *
+4. Supply a strong Blue-Ridge account password when prompted
 5. Reboot
 6. Test SSH and RDP
 #>
@@ -105,6 +105,12 @@ if (-not (Test-IsAdmin)) {
     exit 1
 }
 
+$OperatingSystem = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+if (-not $OperatingSystem -or $OperatingSystem.ProductType -ne 1 -or [version]$OperatingSystem.Version -lt [version]"10.0.22000.0") {
+    Write-Host "This baseline supports Windows 11 workstations only."
+    exit 1
+}
+
 Write-BRLog "=== Blue Ridge Windows 11 Standard Maintenance Baseline started ==="
 
 # ------------------------------------------------------------
@@ -116,11 +122,18 @@ Write-BRLog "Checking local admin account: $BRUser"
 $existingUser = Get-LocalUser -Name $BRUser -ErrorAction SilentlyContinue
 
 if (-not $existingUser) {
-    Write-BRLog "Creating local user $BRUser with no password. Password must be set manually."
+    Write-Host "Enter a strong password for the new $BRUser support account."
+    $supportPassword = Read-Host "Password" -AsSecureString
+    if (-not $supportPassword -or $supportPassword.Length -eq 0) {
+        Write-BRLog "No password supplied. Refusing to create a passwordless administrator account."
+        Write-Host "No password supplied. No support account or remote access was configured."
+        exit 1
+    }
+    Write-BRLog "Creating local user $BRUser with an administrator-supplied password."
     try {
         New-LocalUser `
             -Name $BRUser `
-            -NoPassword `
+            -Password $supportPassword `
             -Description "Blue Ridge Systems local admin account" `
             -ErrorAction Stop
 
@@ -132,7 +145,21 @@ if (-not $existingUser) {
     Write-BRLog "$BRUser already exists. Skipping user creation."
 }
 
-Add-MemberSafely -Group "Administrators" -Member $BRUser
+$existingUser = Get-LocalUser -Name $BRUser -ErrorAction SilentlyContinue
+if (-not $existingUser) {
+    Write-BRLog "The $BRUser account is unavailable. Refusing to enable remote support access."
+    Write-Host "The support account could not be verified. RDP and SSH were not enabled."
+    exit 1
+}
+if (-not $existingUser.Enabled) {
+    Enable-LocalUser -Name $BRUser -ErrorAction Stop
+    Write-BRLog "Enabled existing local user $BRUser."
+}
+
+$AdministratorsGroup = (Get-LocalGroup -SID "S-1-5-32-544" -ErrorAction Stop).Name
+$RemoteDesktopUsersGroup = (Get-LocalGroup -SID "S-1-5-32-555" -ErrorAction Stop).Name
+
+Add-MemberSafely -Group $AdministratorsGroup -Member $BRUser
 
 try {
     Set-LocalUser -Name $BRUser -PasswordNeverExpires $true
@@ -157,12 +184,12 @@ if ($CurrentUserFull) {
     Write-BRLog "Could not detect current console user."
 }
 
-Add-MemberSafely -Group "Remote Desktop Users" -Member $BRUser
+Add-MemberSafely -Group $RemoteDesktopUsersGroup -Member $BRUser
 
 if ($CurrentUserFull) {
-    Add-MemberSafely -Group "Remote Desktop Users" -Member $CurrentUserFull
+    Add-MemberSafely -Group $RemoteDesktopUsersGroup -Member $CurrentUserFull
 } elseif ($CurrentUserShort) {
-    Add-MemberSafely -Group "Remote Desktop Users" -Member $CurrentUserShort
+    Add-MemberSafely -Group $RemoteDesktopUsersGroup -Member $CurrentUserShort
 }
 
 # ------------------------------------------------------------
@@ -276,8 +303,8 @@ Write-BRLog "Tuning Microsoft Defender without disabling protection."
 
 try {
     Set-MpPreference -ScanAvgCPULoadFactor 20
-    Set-MpPreference -DisableEmailScanning $true
-    Set-MpPreference -SubmitSamplesConsent 2
+    Set-MpPreference -DisableEmailScanning $false
+    Set-MpPreference -SubmitSamplesConsent 1
     Set-MpPreference -MAPSReporting 1
 
     Write-BRLog "Defender preferences adjusted."
@@ -292,6 +319,8 @@ try {
 Write-BRLog "Writing maintenance script: $MaintScript"
 
 $MaintenanceContent = @'
+#requires -RunAsAdministrator
+#requires -Version 5.1
 $ErrorActionPreference = "Continue"
 
 $BRRoot = "C:\ProgramData\BlueRidge"
@@ -494,16 +523,17 @@ try {
     Write-BRLog "Defender quick scan issue: $($_.Exception.Message)"
 }
 
-Write-BRLog "Forcing true defrag on C:."
+Write-BRLog "Running media-appropriate optimization on C:."
 try {
-    Optimize-Volume C -Defrag -Verbose
+    Optimize-Volume C -Verbose
 } catch {
-    Write-BRLog "Optimize-Volume defrag issue: $($_.Exception.Message)"
+    Write-BRLog "Optimize-Volume issue: $($_.Exception.Message)"
 }
 
 Write-BRLog "=== Blue Ridge maintenance completed ==="
 '@
 
+[void][scriptblock]::Create($MaintenanceContent)
 Set-Content -Path $MaintScript -Value $MaintenanceContent -Encoding UTF8
 
 # ------------------------------------------------------------
@@ -538,12 +568,12 @@ try {
     Write-BRLog "SFC issue: $($_.Exception.Message)"
 }
 
-Write-BRLog "Running forced true defrag on C:."
+Write-BRLog "Running media-appropriate optimization on C:."
 
 try {
-    Optimize-Volume C -Defrag -Verbose
+    Optimize-Volume C -Verbose
 } catch {
-    Write-BRLog "Forced defrag issue: $($_.Exception.Message)"
+    Write-BRLog "Volume optimization issue: $($_.Exception.Message)"
 }
 
 # ------------------------------------------------------------
@@ -644,10 +674,7 @@ Write-Host "Scheduled maintenance:"
 Write-Host "    Tuesday at 2:00 AM"
 Write-Host "    Friday at 2:00 AM"
 Write-Host ""
-Write-Host "Manual next step:"
-Write-Host "    net user Blue-Ridge *"
-Write-Host ""
-Write-Host "Recommended after password is set:"
+Write-Host "Recommended next steps:"
 Write-Host "    Reboot the PC"
 Write-Host "    Run Windows Update manually until fully current"
 Write-Host "    Review Microsoft Store updates"

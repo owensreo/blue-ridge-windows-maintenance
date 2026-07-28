@@ -15,8 +15,8 @@ $logDir = 'C:\ProgramData\BlueRidge\Logs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 $log = Join-Path $logDir 'windows-health-report.log'
 
-function Write-Log { param([string]$Message) Add-Content -Path $log -Value "[$(Get-Date -Format s)] $Message" }
-function Invoke-Safe { param([scriptblock]$Script) try { & $Script } catch { Write-Log $_.Exception.Message; $null } }
+function Write-BRLog { param([string]$Message) Add-Content -Path $log -Value "[$(Get-Date -Format s)] $Message" }
+function Invoke-Safe { param([scriptblock]$Script) try { & $Script } catch { Write-BRLog $_.Exception.Message; $null } }
 function Test-PendingReboot {
     $r = @()
     if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') { $r += 'CBS' }
@@ -25,7 +25,7 @@ function Test-PendingReboot {
     [pscustomobject]@{ Pending = ($r.Count -gt 0); Reasons = $r }
 }
 
-Write-Log "Starting health report: $outDir"
+Write-BRLog "Starting health report: $outDir"
 $os = Get-CimInstance Win32_OperatingSystem
 $computer = Get-CimInstance Win32_ComputerSystem
 $bios = Get-CimInstance Win32_BIOS
@@ -37,17 +37,22 @@ $tpm = Invoke-Safe { Get-Tpm | Select-Object TpmPresent,TpmReady,TpmEnabled,TpmA
 $secureBoot = Invoke-Safe { Confirm-SecureBootUEFI }
 $defender = Invoke-Safe { Get-MpComputerStatus | Select-Object AntivirusEnabled,RealTimeProtectionEnabled,BehaviorMonitorEnabled,AntivirusSignatureVersion,AntivirusSignatureLastUpdated,QuickScanAge,FullScanAge }
 $net = Get-NetIPConfiguration | Where-Object { $_.NetAdapter.Status -eq 'Up' } | ForEach-Object {
-    [pscustomobject]@{ Interface=$_.InterfaceAlias; IPv4=($_.IPv4Address.IPAddress -join ', '); Gateway=($_.IPv4DefaultGateway.NextHop -join ', '); DNS=($_.DNSServer.ServerAddresses -join ', ') }
+    $ipv4 = if ($_.IPv4Address) { $_.IPv4Address.IPAddress -join ', ' } else { '' }
+    $gateway = if ($_.IPv4DefaultGateway) { $_.IPv4DefaultGateway.NextHop -join ', ' } else { '' }
+    $dnsServers = if ($_.DNSServer) { $_.DNSServer.ServerAddresses -join ', ' } else { '' }
+    [pscustomobject]@{ Interface=$_.InterfaceAlias; IPv4=$ipv4; Gateway=$gateway; DNS=$dnsServers }
 }
 $failedServices = Get-CimInstance Win32_Service | Where-Object { $_.StartMode -eq 'Auto' -and $_.State -ne 'Running' } | Select-Object Name,DisplayName,State,StartMode
 $events = Get-WinEvent -FilterHashtable @{LogName=@('System','Application'); Level=@(1,2); StartTime=(Get-Date).AddHours(-$EventHours)} -ErrorAction SilentlyContinue | Select-Object TimeCreated,LogName,Id,ProviderName,LevelDisplayName,Message
 $events | Export-Csv (Join-Path $outDir 'recent-errors.csv') -NoTypeInformation -Encoding UTF8
 $pending = Test-PendingReboot
 $updateServices = Get-Service wuauserv,bits,cryptsvc -ErrorAction SilentlyContinue | Select-Object Name,Status,StartType
+$winRmService = Get-Service WinRM -ErrorAction SilentlyContinue
+$openSshService = Get-Service sshd -ErrorAction SilentlyContinue
 $remote = [pscustomobject]@{
     RDPEnabled = ((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections -eq 0)
-    WinRM      = (Get-Service WinRM -ErrorAction SilentlyContinue).Status
-    OpenSSH    = (Get-Service sshd -ErrorAction SilentlyContinue).Status
+    WinRM      = if ($winRmService) { $winRmService.Status } else { 'Not installed' }
+    OpenSSH    = if ($openSshService) { $openSshService.Status } else { 'Not installed' }
 }
 
 $report = [ordered]@{
@@ -90,5 +95,5 @@ $html = @"
 <!doctype html><html><head><meta charset='utf-8'><title>Blue Ridge Windows Health Report</title><style>body{font-family:Segoe UI,Arial;margin:32px;background:#f5f7fa;color:#172033}h1{color:#0b4f8a}table{border-collapse:collapse;width:100%;background:white;margin-bottom:18px}th,td{border:1px solid #ccd5df;padding:7px;text-align:left}pre{background:white;border:1px solid #ccd5df;padding:12px;white-space:pre-wrap}</style></head><body><h1>Blue Ridge Windows Health Report</h1>$($sections -join "`n")</body></html>
 "@
 $html | Set-Content $htmlPath -Encoding UTF8
-Write-Log 'Health report completed.'
+Write-BRLog 'Health report completed.'
 Write-Host "Health report created: $outDir" -ForegroundColor Green

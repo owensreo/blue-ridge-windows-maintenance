@@ -1,4 +1,5 @@
 #requires -RunAsAdministrator
+#requires -Version 5.1
 <#
 Blue Ridge Print Queue Cleaner
 

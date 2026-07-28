@@ -1,4 +1,5 @@
 #requires -RunAsAdministrator
+#requires -Version 5.1
 <#
 Blue Ridge Outlook Teams Soft Reset
 
@@ -597,14 +598,14 @@ Write-BRLog "=== Blue Ridge Outlook Teams Soft Reset started ==="
 
 Show-DataSafetyReminder
 
-$profile = Select-TargetProfile
-$UserProfile = $profile.FullName
+$targetProfile = Select-TargetProfile
+$UserProfile = $targetProfile.FullName
 
-Write-BRLog "Selected target profile: $($profile.Name) at $UserProfile"
+Write-BRLog "Selected target profile: $($targetProfile.Name) at $UserProfile"
 
 Write-Host ""
 Write-Host "Selected profile:"
-Write-Host "    $($profile.Name)"
+Write-Host "    $($targetProfile.Name)"
 Write-Host "    $UserProfile"
 Write-Host ""
 
@@ -622,12 +623,25 @@ Clear-ClassicTeamsCache -UserProfile $UserProfile
 Clear-NewTeamsCache -UserProfile $UserProfile
 Clear-OutlookSafeCaches -UserProfile $UserProfile
 
-Reset-OutlookNavPane
+$targetIsCurrentPowerShellUser = [string]::Equals(
+    [IO.Path]::GetFullPath($UserProfile).TrimEnd('\'),
+    [IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\'),
+    [StringComparison]::OrdinalIgnoreCase
+)
 
-Optional-LaunchExcelToWakeOffice
+if ($targetIsCurrentPowerShellUser) {
+    Reset-OutlookNavPane
+    Optional-LaunchExcelToWakeOffice
+} else {
+    Write-BRLog "Skipping Outlook /resetnavpane and Excel launch because the selected profile is not the PowerShell user's profile."
+    Write-Host "Skipping user-context Outlook/Excel launches for a different selected profile." -ForegroundColor Yellow
+}
+
 Invoke-OfficeClickToRunUpdate
 Optional-OfficeQuickRepair
-Optional-OutlookSafeMode
+if ($targetIsCurrentPowerShellUser) {
+    Optional-OutlookSafeMode
+}
 Optional-OfficeIdentityCacheReset -UserProfile $UserProfile
 
 Write-BRLog "=== Blue Ridge Outlook Teams Soft Reset completed ==="

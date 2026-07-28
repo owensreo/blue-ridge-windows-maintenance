@@ -1,3 +1,4 @@
+#requires -RunAsAdministrator
 #requires -Version 5.1
 [CmdletBinding()]
 param(
@@ -22,10 +23,13 @@ function Try-Value { param([scriptblock]$Script) try { & $Script } catch { $null
 try {
     $computer = Get-CimInstance Win32_ComputerSystem
     $partOfDomain = [bool]$computer.PartOfDomain
+    $isDomainController = $computer.DomainRole -in 4,5
     $domain = $computer.Domain
     $secureChannel = $null
     $secureError = $null
-    if ($partOfDomain) {
+    if ($isDomainController) {
+        $secureError = 'Test-ComputerSecureChannel is not supported on domain controllers; use dcdiag or nltest results.'
+    } elseif ($partOfDomain) {
         try { $secureChannel = Test-ComputerSecureChannel -ErrorAction Stop } catch { $secureChannel = $false; $secureError = $_.Exception.Message }
     }
 
@@ -52,6 +56,8 @@ try {
 
     $recommendation = if (-not $partOfDomain) {
         'This computer is not domain joined.'
+    } elseif ($isDomainController) {
+        'This computer is a domain controller. Review nltest, SYSVOL, NETLOGON, DNS, time, and event results; use dcdiag for full DC health.'
     } elseif (-not $secureChannel) {
         if ($dcDiscovery -match 'failed|ERROR') { 'Fix DNS or domain controller discovery before attempting trust repair.' }
         elseif (-not $sysvol -or -not $netlogonShare) { 'Domain resources are unreachable. Fix DNS, routing, or DC availability before trust repair.' }
@@ -66,6 +72,7 @@ try {
         GeneratedAt = Get-Date
         ComputerName = $env:COMPUTERNAME
         PartOfDomain = $partOfDomain
+        IsDomainController = $isDomainController
         Domain = $domain
         SecureChannelHealthy = $secureChannel
         SecureChannelError = $secureError

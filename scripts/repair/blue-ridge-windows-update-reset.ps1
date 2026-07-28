@@ -32,11 +32,13 @@ $serviceState | ConvertTo-Json | Set-Content (Join-Path $backupDir 'service-stat
 try {
     if (-not $SkipRestorePoint) {
         Write-Step 'Attempting to create a restore point'
-        try {
-            Enable-ComputerRestore -Drive "$($env:SystemDrive)\" -ErrorAction SilentlyContinue
-            Checkpoint-Computer -Description 'Before Blue Ridge Windows Update Reset' -RestorePointType MODIFY_SETTINGS -ErrorAction Stop | Out-Null
-            Write-Ok 'Restore point created'
-        } catch { Write-WarnMsg 'Restore point unavailable or skipped by Windows' }
+        if ($PSCmdlet.ShouldProcess($env:SystemDrive,'Create a system restore point')) {
+            try {
+                Enable-ComputerRestore -Drive "$($env:SystemDrive)\" -ErrorAction SilentlyContinue
+                Checkpoint-Computer -Description 'Before Blue Ridge Windows Update Reset' -RestorePointType MODIFY_SETTINGS -ErrorAction Stop | Out-Null
+                Write-Ok 'Restore point created'
+            } catch { Write-WarnMsg 'Restore point unavailable or skipped by Windows' }
+        }
     }
 
     Write-Step 'Stopping Windows Update services'
@@ -44,7 +46,7 @@ try {
         $svc = Get-Service $name -ErrorAction SilentlyContinue
         if ($svc -and $svc.Status -ne 'Stopped') {
             if ($PSCmdlet.ShouldProcess($name,'Stop service')) {
-                try { Stop-Service $name -Force -ErrorAction Stop; Write-Ok "Stopped $name" } catch { Write-WarnMsg "Could not stop $name: $($_.Exception.Message)" }
+                try { Stop-Service $name -Force -ErrorAction Stop; Write-Ok "Stopped $name" } catch { Write-WarnMsg "Could not stop ${name}: $($_.Exception.Message)" }
             }
         }
     }
@@ -65,17 +67,19 @@ try {
     foreach ($name in $services) {
         $svc = Get-Service $name -ErrorAction SilentlyContinue
         if ($svc) {
-            try { Start-Service $name -ErrorAction Stop; Write-Ok "Started $name" } catch { Write-WarnMsg "Could not start $name: $($_.Exception.Message)" }
+            if ($PSCmdlet.ShouldProcess($name,'Start service')) {
+                try { Start-Service $name -ErrorAction Stop; Write-Ok "Started $name" } catch { Write-WarnMsg "Could not start ${name}: $($_.Exception.Message)" }
+            }
         }
     }
 
-    if ($RunDISM) {
+    if ($RunDISM -and $PSCmdlet.ShouldProcess('Windows component store','Run DISM RestoreHealth')) {
         Write-Step 'Running DISM RestoreHealth'
         $p = Start-Process dism.exe -ArgumentList '/Online','/Cleanup-Image','/RestoreHealth' -Wait -PassThru -NoNewWindow
         Write-Host "DISM exit code: $($p.ExitCode)"
     }
 
-    if ($TriggerScan) {
+    if ($TriggerScan -and $PSCmdlet.ShouldProcess('Windows Update','Trigger update scan')) {
         Write-Step 'Triggering Windows Update scan'
         $uso = Join-Path $env:windir 'System32\UsoClient.exe'
         if (Test-Path $uso) { Start-Process $uso -ArgumentList 'StartScan' -WindowStyle Hidden }
