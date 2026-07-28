@@ -1,0 +1,5 @@
+#requires -RunAsAdministrator
+#requires -Version 5.1
+[CmdletBinding()]param()
+$root='C:\ProgramData\BlueRidge\ProfileReports';$logs='C:\ProgramData\BlueRidge\Logs';New-Item -ItemType Directory -Force -Path $root,$logs|Out-Null;$s=Get-Date -Format yyyyMMdd-HHmmss;$out=Join-Path $root "profiles-$env:COMPUTERNAME-$s.csv";Start-Transcript -Path (Join-Path $logs 'user-profile-health-check.log') -Append|Out-Null
+try{$rows=Get-CimInstance Win32_UserProfile|Where-Object{-not $_.Special}|ForEach-Object{$p=$_;$nt=Join-Path $p.LocalPath 'NTUSER.DAT';$size=(Get-ChildItem $p.LocalPath -File -Recurse -Force -ErrorAction SilentlyContinue|Measure Length -Sum).Sum;[pscustomobject]@{SID=$p.SID;LocalPath=$p.LocalPath;Loaded=$p.Loaded;Status=$p.Status;LastUseTime=$p.LastUseTime;NTUserDatExists=Test-Path $nt;ProfileSizeGB=[math]::Round($size/1GB,2);TempProfile=($p.LocalPath -match '\\TEMP($|\.)');FolderExists=Test-Path $p.LocalPath}};$rows|Export-Csv $out -NoTypeInformation -Encoding UTF8;$rows|Format-Table -AutoSize;Write-Host "Profile report: $out" -ForegroundColor Green;Write-Warning 'This script does not delete, rename, or rebuild profiles.'}finally{Stop-Transcript|Out-Null}
